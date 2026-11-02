@@ -120,6 +120,8 @@ pub mod bi {
     pub const FUNNEL: &str = "\u{f3e1}";
     pub const FUNNEL_FILL: &str = "\u{f3e0}";
     pub const SLIDERS: &str = "\u{f56b}";
+    pub const GEAR: &str = "\u{f3e5}";
+    pub const GEAR_FILL: &str = "\u{f3e4}";
     pub const LAYERS: &str = "\u{f45b}";
     pub const LAYERS_FILL: &str = "\u{f459}";
     pub const ROBOT: &str = "\u{f6b1}";

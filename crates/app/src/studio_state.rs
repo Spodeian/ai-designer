@@ -376,7 +376,7 @@ impl StudioState {
             }
             StudioFocus::Surgery => {
                 self.canvas_mode = CanvasMode::ModelSurgery;
-                self.bottom_dock_tab = BottomDockTab::ModelSurgery;
+                self.bottom_dock_visible = false;
             }
         }
     }

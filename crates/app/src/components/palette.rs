@@ -86,19 +86,56 @@ impl PaletteView {
     }
 
     fn render_layers_tab(&mut self, ui: &mut Ui, state: &mut StudioState) {
-        // Starter Blueprint Selector (All Bundled Blueprints)
-        ui.label(
-            RichText::new(format!(
-                "Starter & Industry Blueprints ({})",
-                TEMPLATES.len()
-            ))
-            .size(11.5)
-            .color(Color32::from_rgb(180, 180, 180)),
-        );
-        egui::ComboBox::from_id_salt("template_selector")
-            .selected_text(&state.spec.metadata.display_name)
-            .width(ui.available_width() - 10.0)
-            .show_ui(ui, |ui| {
+        // Quick Action: Auto-Architect
+        ui.horizontal(|ui| {
+            if ui
+                .button(
+                    RichText::new(format!("{} Auto-Architect", bi::MAGIC))
+                        .color(Color32::from_rgb(120, 220, 140))
+                        .strong(),
+                )
+                .on_hover_text(
+                    "Automatically synthesize a complete backbone architecture matching declared I/O ports",
+                )
+                .clicked()
+            {
+                let synthesized = shared::advisor::auto_architect::synthesize_architecture(
+                    &format!("{}_synthesized", state.spec.metadata.model_id),
+                    &format!("Synthesized {}", state.spec.metadata.display_name),
+                    state.spec.inputs.clone(),
+                    state.spec.outputs.clone(),
+                );
+                *state = StudioState::new_with_starter(synthesized);
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if !self.search_query.is_empty()
+                    && ui
+                        .small_button(format!("{} Clear", bi::X_LG))
+                        .on_hover_text("Clear search query")
+                        .clicked()
+                {
+                    self.search_query.clear();
+                }
+            });
+        });
+
+        ui.add_space(4.0);
+        ui.separator();
+
+        ScrollArea::vertical().show(ui, |ui| {
+            // Optional Collapsible Starter Blueprints (kept clean & out of the way)
+            egui::CollapsingHeader::new(
+                RichText::new(format!(
+                    "{} Starter Blueprints ({})",
+                    bi::COLLECTION,
+                    TEMPLATES.len()
+                ))
+                .size(12.0)
+                .color(Color32::from_rgb(180, 195, 220)),
+            )
+            .default_open(false)
+            .show(ui, |ui| {
                 for tmpl in TEMPLATES {
                     let is_active = state.spec.metadata.display_name.contains(tmpl.display_name)
                         || state.spec.metadata.model_id
@@ -113,125 +150,10 @@ impl PaletteView {
                 }
             });
 
-        ui.add_space(6.0);
-        if ui
-            .button(
-                RichText::new(format!("{} Auto-Architect Synthesis", bi::MAGIC))
-                    .color(Color32::from_rgb(120, 220, 140))
-                    .strong(),
-            )
-            .on_hover_text(
-                "Automatically synthesize a backbone architecture from declared I/O ports",
-            )
-            .clicked()
-        {
-            let synthesized = shared::advisor::auto_architect::synthesize_architecture(
-                &format!("{}_synthesized", state.spec.metadata.model_id),
-                &format!("Synthesized {}", state.spec.metadata.display_name),
-                state.spec.inputs.clone(),
-                state.spec.outputs.clone(),
-            );
-            *state = StudioState::new_with_starter(synthesized);
-        }
+            ui.add_space(4.0);
+            ui.separator();
+            ui.add_space(2.0);
 
-        ui.add_space(8.0);
-        ui.separator();
-
-        // Layer Catalog Filters (Category + Complexity/Paradigm)
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(format!("{} Layer Filters", bi::FUNNEL))
-                    .size(12.0)
-                    .color(Color32::from_rgb(180, 195, 220))
-                    .strong(),
-            );
-            if self.selected_category.is_some()
-                || self.selected_complexity.is_some()
-                || !self.search_query.is_empty()
-            {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .small_button(format!("{} Reset", bi::ARROW_COUNTERCLOCKWISE))
-                        .on_hover_text("Clear all active layer filters")
-                        .clicked()
-                    {
-                        self.selected_category = None;
-                        self.selected_complexity = None;
-                        self.search_query.clear();
-                    }
-                });
-            }
-        });
-
-        ui.add_space(4.0);
-        let cat_label = self.selected_category.unwrap_or("All Categories (6)");
-        egui::ComboBox::from_id_salt("palette_category_filter")
-            .selected_text(cat_label)
-            .width(ui.available_width() - 10.0)
-            .show_ui(ui, |ui| {
-                if ui
-                    .selectable_label(self.selected_category.is_none(), "All Categories (6)")
-                    .clicked()
-                {
-                    self.selected_category = None;
-                }
-                for &cat in &[
-                    "Attention & Memory",
-                    "State Space & Recurrent",
-                    "Feedforward & Splines",
-                    "Spectral & Physics",
-                    "Norms & Activations",
-                    "Routing & MoE",
-                ] {
-                    if ui
-                        .selectable_label(self.selected_category == Some(cat), cat)
-                        .clicked()
-                    {
-                        self.selected_category = Some(cat);
-                    }
-                }
-            });
-
-        ui.add_space(4.0);
-        let comp_label = self
-            .selected_complexity
-            .unwrap_or("All Complexity / Paradigms");
-        egui::ComboBox::from_id_salt("palette_complexity_filter")
-            .selected_text(comp_label)
-            .width(ui.available_width() - 10.0)
-            .show_ui(ui, |ui| {
-                if ui
-                    .selectable_label(
-                        self.selected_complexity.is_none(),
-                        "All Complexity / Paradigms",
-                    )
-                    .clicked()
-                {
-                    self.selected_complexity = None;
-                }
-                for &comp in &[
-                    "Linear O(T) Sequence",
-                    "KV-Compressed Attention",
-                    "Quadratic / Global Mixing",
-                    "Physics & Geometric",
-                    "Sparse / Conditional",
-                    "Dense Projection",
-                    "Shape-Preserving",
-                    "Optimization-as-Architecture",
-                ] {
-                    if ui
-                        .selectable_label(self.selected_complexity == Some(comp), comp)
-                        .clicked()
-                    {
-                        self.selected_complexity = Some(comp);
-                    }
-                }
-            });
-
-        ui.add_space(6.0);
-        ui.separator();
-
-        ScrollArea::vertical().show(ui, |ui| {
             self.render_category(
                 ui,
                 state,
@@ -996,23 +918,12 @@ impl PaletteView {
         category: &'static str,
         items: &[(&'static str, OperatorKind)],
     ) {
-        if let Some(sel_cat) = self.selected_category
-            && sel_cat != category
-        {
-            return;
-        }
-
         let query = self.search_query.to_lowercase();
         let matching_items: Vec<&(&'static str, OperatorKind)> = items
             .iter()
             .filter(|(name, op)| {
-                let ov = op.overview();
-                if let Some(sel_comp) = self.selected_complexity
-                    && ov.complexity_tag != sel_comp
-                {
-                    return false;
-                }
                 if !query.is_empty() {
+                    let ov = op.overview();
                     let match_name = name.to_lowercase().contains(&query);
                     let match_cat = category.to_lowercase().contains(&query);
                     let match_desc = ov.what_it_does.to_lowercase().contains(&query);
