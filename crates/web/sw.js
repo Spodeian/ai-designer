@@ -4,11 +4,11 @@ const CACHE_NAME = 'ai-designer-studio-cache-v20261101';
 
 // Static assets to pre-cache on install
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.svg',
-  '/favicon.ico'
+  './',
+  './index.html',
+  './manifest.json',
+  './favicon.svg',
+  './favicon.ico'
 ];
 
 // 1. Pre-cache on install with error resilience and activate immediately

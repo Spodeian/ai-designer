@@ -72,12 +72,18 @@ jobs:
       - name: Add Cargo Bin to PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
       - name: Build Web Application
         env:
           RUSTFLAGS: "-C target-feature=+simd128,+bulk-memory,+mutable-globals,+nontrapping-fptoint,+sign-ext,+reference-types,+multivalue -C link-arg=-zstack-size=2097152 -C target-cpu=generic"
         run: |
           echo "Active wasm-opt version: $(wasm-opt --version)"
-          trunk build --release --public-url "/"
+          PUBLIC_URL="${{ steps.pages.outputs.base_path }}/"
+          echo "Building with public URL: $PUBLIC_URL"
+          trunk build --release --public-url "$PUBLIC_URL"
           for wasm_file in crates/web/dist/*.wasm; do
             if [ -f "$wasm_file" ]; then
               echo "Optimizing $wasm_file with wasm-opt (SIMD enabled)"
@@ -111,9 +117,6 @@ jobs:
               npx --yes html-minifier-terser --collapse-whitespace --remove-comments --remove-redundant-attributes --remove-script-type-attributes --remove-style-link-type-attributes --use-short-doctype --minify-css true --minify-js true -o crates/web/dist/index.html crates/web/dist/index.html
             fi
           fi
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
 
       - name: Upload compiled assets artifact
         uses: actions/upload-pages-artifact@v3
