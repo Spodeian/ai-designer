@@ -330,10 +330,10 @@ impl AiDesignerApp {
     }
 
     pub fn render_designer_studio(&mut self, ui: &mut egui::Ui) {
-        // -----------------------------------------------------------------
-        // CONTEXTUAL ACTION RIBBON (Adapts strictly to active Focus Mode!)
-        // -----------------------------------------------------------------
-        ui.horizontal(|ui| {
+        // 1. Contextual Action Ribbon (Top panel for active Focus Mode)
+        egui::Panel::top("designer_context_ribbon").show(ui, |ui| {
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
             match self.studio.focus_mode {
                 StudioFocus::Model => {
                     // Sub-view selectors: Graph, Outliner, YAML
@@ -406,11 +406,15 @@ impl AiDesignerApp {
                             self.studio.bottom_dock_tab == BottomDockTab::Advisor && self.studio.bottom_dock_visible,
                             egui::RichText::new(adv_pill_text).color(adv_pill_color),
                         )
-                        .on_hover_text("Inspect 55+ mathematical, topological, and hardware compatibility checks with 1-click automated repairs")
+                        .on_hover_text("Inspect 55+ mathematical, topological, and hardware compatibility checks with 1-click automated repairs (click to toggle)")
                         .clicked()
                     {
-                        self.studio.bottom_dock_visible = true;
-                        self.studio.bottom_dock_tab = BottomDockTab::Advisor;
+                        if self.studio.bottom_dock_visible && self.studio.bottom_dock_tab == BottomDockTab::Advisor {
+                            self.studio.bottom_dock_visible = false;
+                        } else {
+                            self.studio.bottom_dock_visible = true;
+                            self.studio.bottom_dock_tab = BottomDockTab::Advisor;
+                        }
                     }
 
                     if ui
@@ -418,11 +422,15 @@ impl AiDesignerApp {
                             self.studio.bottom_dock_tab == BottomDockTab::Roofline && self.studio.bottom_dock_visible,
                             format!("{} Roofline & VRAM", bi::BAR_CHART_LINE),
                         )
-                        .on_hover_text("Analyze arithmetic intensity, memory bandwidth ceiling, and activation memory footprint")
+                        .on_hover_text("Analyze arithmetic intensity, memory bandwidth ceiling, and activation memory footprint (click to toggle)")
                         .clicked()
                     {
-                        self.studio.bottom_dock_visible = true;
-                        self.studio.bottom_dock_tab = BottomDockTab::Roofline;
+                        if self.studio.bottom_dock_visible && self.studio.bottom_dock_tab == BottomDockTab::Roofline {
+                            self.studio.bottom_dock_visible = false;
+                        } else {
+                            self.studio.bottom_dock_visible = true;
+                            self.studio.bottom_dock_tab = BottomDockTab::Roofline;
+                        }
                     }
 
                     if ui
@@ -434,11 +442,15 @@ impl AiDesignerApp {
                                 self.studio.pareto_candidates.len()
                             ),
                         )
-                        .on_hover_text("Compare 5 hardware-aware Pareto scaling candidates across latency, parameter count, and loss")
+                        .on_hover_text("Compare 5 hardware-aware Pareto scaling candidates across latency, parameter count, and loss (click to toggle)")
                         .clicked()
                     {
-                        self.studio.bottom_dock_visible = true;
-                        self.studio.bottom_dock_tab = BottomDockTab::ParetoExplorer;
+                        if self.studio.bottom_dock_visible && self.studio.bottom_dock_tab == BottomDockTab::ParetoExplorer {
+                            self.studio.bottom_dock_visible = false;
+                        } else {
+                            self.studio.bottom_dock_visible = true;
+                            self.studio.bottom_dock_tab = BottomDockTab::ParetoExplorer;
+                        }
                     }
                 }
                 StudioFocus::Training => {
@@ -484,11 +496,15 @@ impl AiDesignerApp {
                             self.studio.bottom_dock_tab == BottomDockTab::StudioRunner && self.studio.bottom_dock_visible,
                             format!("{} Live Runner & Convergence", bi::PLAY_FILL),
                         )
-                        .on_hover_text("Open the live training convergence monitor, loss curves, and Seed-42 parity verifier dock")
+                        .on_hover_text("Open the live training convergence monitor, loss curves, and Seed-42 parity verifier dock (click to toggle)")
                         .clicked()
                     {
-                        self.studio.bottom_dock_visible = true;
-                        self.studio.bottom_dock_tab = BottomDockTab::StudioRunner;
+                        if self.studio.bottom_dock_visible && self.studio.bottom_dock_tab == BottomDockTab::StudioRunner {
+                            self.studio.bottom_dock_visible = false;
+                        } else {
+                            self.studio.bottom_dock_visible = true;
+                            self.studio.bottom_dock_tab = BottomDockTab::StudioRunner;
+                        }
                     }
                 }
                 StudioFocus::Surgery => {
@@ -585,10 +601,9 @@ impl AiDesignerApp {
                     self.studio.trigger_code_generation();
                 }
             });
+            });
+            ui.add_space(2.0);
         });
-
-        ui.add_space(4.0);
-        ui.separator();
 
         // 2. Left Sidepanel: Palette / Catalog (only when visible)
         if self.studio.left_panel_visible {
@@ -917,17 +932,21 @@ impl eframe::App for AiDesignerApp {
             ui.add_space(3.0);
         });
 
-        egui::CentralPanel::default().show(ui, |ui| match self.state.active_page {
+        match self.state.active_page {
             AppPage::Designer => {
                 self.render_designer_studio(ui);
             }
             AppPage::Gallery => {
-                components::gallery::render_gallery_page(self, ui, &constraints);
+                egui::CentralPanel::default().show(ui, |ui| {
+                    components::gallery::render_gallery_page(self, ui, &constraints);
+                });
             }
             AppPage::About => {
-                components::about::render_about_page(self, ui, &constraints);
+                egui::CentralPanel::default().show(ui, |ui| {
+                    components::about::render_about_page(self, ui, &constraints);
+                });
             }
-        });
+        }
 
         components::modals::render_dialogs(self, ui);
         components::modals::render_warning_banners(self, ui.ctx());

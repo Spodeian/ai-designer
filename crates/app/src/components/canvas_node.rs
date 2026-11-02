@@ -42,8 +42,16 @@ impl CanvasNodeView {
 
         let scroll_delta = ui.input(|i| i.smooth_scroll_delta.y);
         if scroll_delta != 0.0 && response.hovered() {
-            let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
-            state.zoom_level = (state.zoom_level * zoom_factor).clamp(0.25, 2.5);
+            // Calibrated 6x gentler zoom sensitivity (~1.6% per mouse wheel notch instead of prior 10%)
+            let zoom_factor = (scroll_delta * 0.0018).exp().clamp(0.97, 1.03);
+            let new_zoom = (state.zoom_level * zoom_factor).clamp(0.25, 2.5);
+
+            // Zoom smoothly toward pointer position to keep the hovered point anchored
+            if let Some(pointer_pos) = response.hover_pos() {
+                let pointer_canvas = (pointer_pos - rect.min - state.pan_offset) / state.zoom_level;
+                state.pan_offset = pointer_pos - rect.min - pointer_canvas * new_zoom;
+            }
+            state.zoom_level = new_zoom;
         }
 
         // Draw background canvas grid
@@ -786,7 +794,7 @@ impl CanvasNodeView {
                 .on_hover_text("Zoom Out")
                 .clicked()
             {
-                state.zoom_level = (state.zoom_level * 0.85).clamp(0.25, 2.5);
+                state.zoom_level = (state.zoom_level * 0.95).clamp(0.25, 2.5);
             }
             let zoom_pct = format!("{:.0}%", state.zoom_level * 100.0);
             if ui
@@ -801,7 +809,7 @@ impl CanvasNodeView {
                 .on_hover_text("Zoom In")
                 .clicked()
             {
-                state.zoom_level = (state.zoom_level * 1.15).clamp(0.25, 2.5);
+                state.zoom_level = (state.zoom_level * 1.05).clamp(0.25, 2.5);
             }
 
             ui.separator();
