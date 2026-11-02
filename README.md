@@ -1,6 +1,6 @@
 # `ai_designer` — AI Designer Studio & Training Suite
 
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
 [![Rust: 2024 Edition](https://img.shields.io/badge/Rust-2024%20Edition-orange.svg)](https://www.rust-lang.org)
 [![egui: 0.36](https://img.shields.io/badge/egui-0.36-blueviolet.svg)](https://github.com/emilk/egui)
 [![AI-Examples: 263 Topics](https://img.shields.io/badge/AI--Examples-18%20Categories%20%E2%80%A2%20263%20Topics-2ea44f)](../../README.md)
@@ -268,4 +268,4 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## 📄 License
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE) at your option.
+Licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License (CC BY-NC-SA 4.0)](LICENSE).
