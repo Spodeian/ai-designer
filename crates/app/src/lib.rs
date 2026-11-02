@@ -881,13 +881,32 @@ impl eframe::App for AiDesignerApp {
         egui::Panel::bottom("bottom_footer").show(ui, |ui| {
             ui.add_space(3.0);
             ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(
-                        "Built with Rust & egui 0.36 • Serverless WASM & Native Desktop",
-                    )
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-                );
+                if self.state.active_page == AppPage::Designer {
+                    let sel_info = if let Some(ref sel) = self.studio.selected_node_id {
+                        format!("Layer: {sel}")
+                    } else {
+                        format!("Blueprint: {}", self.studio.spec.metadata.display_name)
+                    };
+                    let zoom_pct = format!("{:.0}%", self.studio.zoom_level * 100.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} {} • Zoom: {} • F: Fit | Z: Focus | M: Map | Del: Delete | Ctrl+K: Cmds",
+                            bi::DIAGRAM_3,
+                            sel_info,
+                            zoom_pct
+                        ))
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                    );
+                } else {
+                    ui.label(
+                        egui::RichText::new(
+                            "Built with Rust & egui 0.36 • Serverless WASM & Native Desktop",
+                        )
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                    );
+                }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let tier_text = format!("Storage: {}", self.storage_diag.backend.label());

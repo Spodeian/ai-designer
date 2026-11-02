@@ -89,6 +89,8 @@ pub mod bi {
     pub const PLUS_CIRCLE: &str = "\u{f4fa}";
     pub const DASH_LG: &str = "\u{f63b}";
     pub const ARROWS_FULLSCREEN: &str = "\u{f14d}";
+    pub const ASPECT_RATIO: &str = "\u{f122}";
+    pub const MAP: &str = "\u{f47c}";
     pub const CROSSHAIR: &str = "\u{f769}";
     pub const ARROW_UP: &str = "\u{f148}";
     pub const ARROW_DOWN: &str = "\u{f128}";

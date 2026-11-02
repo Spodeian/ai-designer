@@ -1,7 +1,7 @@
 //! Node and Model Inspector sidebar: editing layer parameters, 27-precision lattice, and optimizer rules.
 
 use crate::{icons::bi, studio_state::StudioState};
-use eframe::egui::{self, Color32, RichText, ScrollArea, Ui};
+use eframe::egui::{self, Color32, RichText, ScrollArea, Stroke, Ui};
 use shared::{
     CoordinateEncoding, HaltingGate, LossPairing, NormPlacement, NormalizerSpec, OperatorKind,
     PrecisionFormat, StructuralConstraint, WiringPattern,
@@ -58,6 +58,7 @@ impl InspectorView {
     }
 
     fn render_node_inspector(&mut self, ui: &mut Ui, state: &mut StudioState, node_id: &str) {
+        // 1. Header with title & Deselect
         ui.horizontal(|ui| {
             ui.heading(
                 RichText::new(format!("{} Layer Inspector", bi::SLIDERS))
@@ -75,30 +76,183 @@ impl InspectorView {
             });
         });
 
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            if ui
-                .small_button(format!("{} Move Up", bi::ARROW_UP))
-                .on_hover_text("Move layer earlier in execution sequence")
-                .clicked()
-            {
-                state.move_selected_node(-1);
-            }
-            if ui
-                .small_button(format!("{} Move Down", bi::ARROW_DOWN))
-                .on_hover_text("Move layer later in execution sequence")
-                .clicked()
-            {
-                state.move_selected_node(1);
-            }
-            if ui
-                .small_button(format!("{} Duplicate", bi::COPY))
-                .on_hover_text("Clone this layer immediately after current position")
-                .clicked()
-            {
-                state.duplicate_selected_node();
-            }
-        });
+        // 2. Sequential Layer Stepping Breadcrumbs
+        let node_idx = state.spec.graph.nodes.iter().position(|n| n.id == node_id);
+        if let Some(idx) = node_idx {
+            let total_nodes = state.spec.graph.nodes.len();
+            let prev_id = if idx > 0 {
+                Some(state.spec.graph.nodes[idx - 1].id.clone())
+            } else {
+                None
+            };
+            let next_id = if idx + 1 < total_nodes {
+                Some(state.spec.graph.nodes[idx + 1].id.clone())
+            } else {
+                None
+            };
+
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                if let Some(prev) = prev_id {
+                    if ui
+                        .small_button(format!("{} Prev", bi::ARROW_LEFT))
+                        .on_hover_text(format!("Inspect previous layer '{}'", prev))
+                        .clicked()
+                    {
+                        state.selected_node_id = Some(prev);
+                    }
+                } else {
+                    ui.add_enabled(
+                        false,
+                        egui::Button::new(format!("{} Prev", bi::ARROW_LEFT)).small(),
+                    );
+                }
+
+                ui.label(
+                    RichText::new(format!("{}/{}", idx + 1, total_nodes))
+                        .monospace()
+                        .size(11.0)
+                        .color(Color32::from_rgb(150, 180, 210)),
+                );
+
+                if let Some(next) = next_id {
+                    if ui
+                        .small_button(format!("Next {}", bi::ARROW_RIGHT))
+                        .on_hover_text(format!("Inspect next layer '{}'", next))
+                        .clicked()
+                    {
+                        state.selected_node_id = Some(next);
+                    }
+                } else {
+                    ui.add_enabled(
+                        false,
+                        egui::Button::new(format!("Next {}", bi::ARROW_RIGHT)).small(),
+                    );
+                }
+
+                ui.separator();
+
+                if ui
+                    .small_button(format!("{} Up", bi::ARROW_UP))
+                    .on_hover_text("Move layer earlier in execution sequence")
+                    .clicked()
+                {
+                    state.move_selected_node(-1);
+                }
+                if ui
+                    .small_button(format!("{} Down", bi::ARROW_DOWN))
+                    .on_hover_text("Move layer later in execution sequence")
+                    .clicked()
+                {
+                    state.move_selected_node(1);
+                }
+                if ui
+                    .small_button(format!("{} Dup", bi::COPY))
+                    .on_hover_text("Clone this layer immediately after current position (Ctrl+D)")
+                    .clicked()
+                {
+                    state.duplicate_selected_node();
+                }
+            });
+        }
+
+        // 3. Live Inferred Tensor Flow Card
+        if let Some(shape_info) = state.shape_report.node_shapes.get(node_id) {
+            let in_str = shape_info
+                .input_shape
+                .as_ref()
+                .map(|s| s.display())
+                .unwrap_or_else(|| "[?]".to_string());
+            let out_str = shape_info
+                .output_shape
+                .as_ref()
+                .map(|s| s.display())
+                .unwrap_or_else(|| "[?]".to_string());
+
+            ui.add_space(4.0);
+            egui::Frame::group(ui.style())
+                .fill(Color32::from_rgb(22, 26, 36))
+                .stroke(Stroke::new(
+                    1.0,
+                    if shape_info.is_valid {
+                        Color32::from_rgb(45, 65, 95)
+                    } else {
+                        Color32::from_rgb(240, 80, 80)
+                    },
+                ))
+                .corner_radius(6)
+                .inner_margin(6.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new("Tensor Flow:")
+                                .size(11.0)
+                                .strong()
+                                .color(Color32::from_rgb(160, 190, 220)),
+                        );
+                        ui.label(
+                            RichText::new(&in_str)
+                                .monospace()
+                                .size(10.5)
+                                .color(Color32::from_rgb(110, 205, 255)),
+                        );
+                        ui.label(
+                            RichText::new(bi::ARROW_RIGHT)
+                                .color(Color32::from_rgb(130, 160, 200)),
+                        );
+                        ui.label(
+                            RichText::new(&out_str)
+                                .monospace()
+                                .size(10.5)
+                                .color(Color32::from_rgb(130, 235, 170)),
+                        );
+                    });
+                    if !shape_info.is_valid {
+                        if let Some(ref err) = shape_info.error {
+                            ui.label(
+                                RichText::new(format!("⚠️ Shape Mismatch: {err}"))
+                                    .size(10.5)
+                                    .color(Color32::from_rgb(255, 110, 110))
+                                    .strong(),
+                            );
+                        }
+                    }
+                });
+        }
+
+        // 4. Advisory Diagnostics for this layer
+        let findings: Vec<_> = state
+            .advisor_findings
+            .iter()
+            .filter(|f| f.target_id.as_deref() == Some(node_id))
+            .collect();
+        for f in findings {
+            ui.add_space(3.0);
+            egui::Frame::group(ui.style())
+                .fill(Color32::from_rgb(36, 28, 20))
+                .stroke(Stroke::new(1.0, Color32::from_rgb(200, 140, 50)))
+                .corner_radius(6)
+                .inner_margin(6.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(bi::EXCLAMATION_TRIANGLE_FILL)
+                                .color(Color32::from_rgb(240, 180, 60)),
+                        );
+                        ui.label(
+                            RichText::new(&f.title)
+                                .size(11.0)
+                                .strong()
+                                .color(Color32::from_rgb(255, 210, 130)),
+                        );
+                    });
+                    ui.label(
+                        RichText::new(&f.description)
+                            .size(10.0)
+                            .color(Color32::from_rgb(220, 200, 180)),
+                    );
+                });
+        }
 
         ui.add_space(4.0);
         ui.separator();
@@ -1483,7 +1637,115 @@ impl InspectorView {
                 .size(16.0)
                 .strong(),
         );
-        ui.add_space(8.0);
+        ui.add_space(4.0);
+
+        // Executive Model Summary Dashboard
+        let layer_count = state.spec.graph.nodes.len();
+        let in_count = state.spec.inputs.len();
+        let out_count = state.spec.outputs.len();
+        let total_params = state.partition_report.total_param_count as u64;
+        let vram_mb = state.roofline_report.vram.total_allocated_bytes as f64 / (1024.0 * 1024.0);
+        let diag_count = state.advisor_findings.len();
+        let shape_valid = state.shape_report.is_valid;
+
+        egui::Frame::group(ui.style())
+            .fill(Color32::from_rgb(20, 24, 34))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(45, 55, 78)))
+            .corner_radius(8)
+            .inner_margin(8.0)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(bi::DIAGRAM_3).color(Color32::from_rgb(100, 190, 255)));
+                    ui.label(RichText::new("Architecture Overview").strong().color(Color32::WHITE));
+                });
+                ui.add_space(4.0);
+
+                ui.columns(2, |cols| {
+                    cols[0].vertical(|ui| {
+                        ui.label(
+                            RichText::new("Layers:")
+                                .size(10.5)
+                                .color(Color32::from_rgb(150, 165, 185)),
+                        );
+                        ui.label(
+                            RichText::new(format!("{layer_count} ({in_count} in, {out_count} out)"))
+                                .size(11.5)
+                                .strong()
+                                .color(Color32::from_rgb(130, 215, 255)),
+                        );
+                    });
+                    cols[1].vertical(|ui| {
+                        ui.label(
+                            RichText::new("Parameters:")
+                                .size(10.5)
+                                .color(Color32::from_rgb(150, 165, 185)),
+                        );
+                        let param_str = if total_params >= 1_000_000_000 {
+                            format!("{:.2}B", total_params as f64 / 1e9)
+                        } else if total_params >= 1_000_000 {
+                            format!("{:.1}M", total_params as f64 / 1e6)
+                        } else if total_params >= 1_000 {
+                            format!("{:.0}K", total_params as f64 / 1e3)
+                        } else {
+                            format!("{total_params}")
+                        };
+                        ui.label(
+                            RichText::new(param_str)
+                                .size(11.5)
+                                .strong()
+                                .color(Color32::from_rgb(120, 230, 160)),
+                        );
+                    });
+                });
+
+                ui.add_space(4.0);
+                ui.columns(2, |cols| {
+                    cols[0].vertical(|ui| {
+                        ui.label(
+                            RichText::new("VRAM Footprint:")
+                                .size(10.5)
+                                .color(Color32::from_rgb(150, 165, 185)),
+                        );
+                        ui.label(
+                            RichText::new(format!("{:.1} MB", vram_mb))
+                                .size(11.5)
+                                .strong()
+                                .color(Color32::from_rgb(255, 205, 120)),
+                        );
+                    });
+                    cols[1].vertical(|ui| {
+                        ui.label(
+                            RichText::new("Health:")
+                                .size(10.5)
+                                .color(Color32::from_rgb(150, 165, 185)),
+                        );
+                        if shape_valid && diag_count == 0 {
+                            ui.label(
+                                RichText::new("✔ Verified")
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::from_rgb(110, 230, 140)),
+                            );
+                        } else if !shape_valid {
+                            ui.label(
+                                RichText::new("❌ Shape Error")
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::from_rgb(255, 100, 100)),
+                            );
+                        } else {
+                            ui.label(
+                                RichText::new(format!("⚠️ {diag_count} Warnings"))
+                                    .size(11.5)
+                                    .strong()
+                                    .color(Color32::from_rgb(255, 190, 70)),
+                            );
+                        }
+                    });
+                });
+            });
+
+        ui.add_space(6.0);
         ui.separator();
 
         ui.label(

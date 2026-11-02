@@ -223,6 +223,7 @@ pub struct StudioState {
     pub left_panel_visible: bool,
     pub right_panel_visible: bool,
     pub bottom_dock_visible: bool,
+    pub minimap_visible: bool,
 
     // Undo / Redo History Stack
     pub undo_stack: Vec<AiDesignSpec>,
@@ -274,6 +275,7 @@ impl StudioState {
             left_panel_visible: true,
             right_panel_visible: true,
             bottom_dock_visible: true,
+            minimap_visible: true,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
         };
@@ -322,6 +324,11 @@ impl StudioState {
     /// Returns true if redo history is available.
     pub fn can_redo(&self) -> bool {
         !self.redo_stack.is_empty()
+    }
+
+    /// Toggles the interactive canvas mini-map navigator.
+    pub fn toggle_minimap(&mut self) {
+        self.minimap_visible = !self.minimap_visible;
     }
 
     /// Toggles the left palette / stage catalog panel.
@@ -442,6 +449,56 @@ impl StudioState {
                 Pos2::new(out_x, out_base_y + (i as f32 * 140.0)),
             );
         }
+    }
+
+    /// Fits canvas pan and zoom so that all nodes (inputs, layers, and outputs) fit comfortably within the viewport without altering relative positions.
+    pub fn fit_view_to_nodes(&mut self, viewport_size: Vec2) {
+        if self.node_positions.is_empty() {
+            self.auto_layout_nodes();
+            return;
+        }
+
+        let mut min_pos = Pos2::new(f32::MAX, f32::MAX);
+        let mut max_pos = Pos2::new(f32::MIN, f32::MIN);
+
+        // Nominally card width is 235, height 92
+        let card_w = 235.0;
+        let card_h = 92.0;
+
+        for pos in self.node_positions.values() {
+            min_pos.x = min_pos.x.min(pos.x);
+            min_pos.y = min_pos.y.min(pos.y);
+            max_pos.x = max_pos.x.max(pos.x + card_w);
+            max_pos.y = max_pos.y.max(pos.y + card_h);
+        }
+
+        if min_pos.x >= max_pos.x || min_pos.y >= max_pos.y {
+            self.pan_offset = Vec2::ZERO;
+            self.zoom_level = 1.0;
+            return;
+        }
+
+        let bbox_w = (max_pos.x - min_pos.x).max(10.0);
+        let bbox_h = (max_pos.y - min_pos.y).max(10.0);
+        let bbox_center = Pos2::new((min_pos.x + max_pos.x) * 0.5, (min_pos.y + max_pos.y) * 0.5);
+
+        // Add margins for comfortable framing around edges and top HUD
+        let avail_w = (viewport_size.x - 140.0).max(100.0);
+        let avail_h = (viewport_size.y - 120.0).max(100.0);
+
+        let scale_x = avail_w / bbox_w;
+        let scale_y = avail_h / bbox_h;
+        let new_zoom = scale_x.min(scale_y).clamp(0.28, 1.20);
+
+        self.zoom_level = new_zoom;
+        self.pan_offset = (viewport_size * 0.5) - (bbox_center.to_vec2() * new_zoom);
+    }
+
+    /// Centers the canvas pan directly on a specific node.
+    pub fn center_on_node(&mut self, node_id: &str, viewport_size: Vec2) {
+        let pos = self.get_node_pos(node_id);
+        let card_center = pos + Vec2::new(235.0 * 0.5, 92.0 * 0.5);
+        self.pan_offset = (viewport_size * 0.5) - (card_center.to_vec2() * self.zoom_level);
     }
 
     /// Moves the currently selected node earlier (`delta < 0`) or later (`delta > 0`) in execution order.

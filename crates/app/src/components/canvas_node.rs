@@ -6,7 +6,7 @@ use eframe::egui::{
     self, Color32, CornerRadius, Id, Pos2, Rect, RichText, Sense, Stroke, Ui, Vec2,
 };
 use eframe::epaint::CubicBezierShape;
-use shared::{PrecisionFormat, TensorSpace};
+use shared::{advisor::AdvisorySeverity, PrecisionFormat, TensorSpace};
 
 fn format_count(n: usize) -> String {
     if n >= 1_000_000_000 {
@@ -52,6 +52,21 @@ impl CanvasNodeView {
                 state.pan_offset = pointer_pos - rect.min - pointer_canvas * new_zoom;
             }
             state.zoom_level = new_zoom;
+        }
+
+        // Canvas keyboard shortcuts (F: Fit to View, Z: Center Selection, M: Mini-Map)
+        if response.hovered() && !ui.ctx().egui_wants_keyboard_input() {
+            if ui.input(|i| i.key_pressed(egui::Key::F)) {
+                state.fit_view_to_nodes(rect.size());
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::Z)) {
+                if let Some(sel_id) = state.selected_node_id.clone() {
+                    state.center_on_node(&sel_id, rect.size());
+                }
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::M)) {
+                state.toggle_minimap();
+            }
         }
 
         // Draw background canvas grid
@@ -377,6 +392,17 @@ impl CanvasNodeView {
             let is_selected = state.selected_node_id.as_deref() == Some(&node.id);
             let is_active = node.execution_condition.is_currently_active();
 
+            let shape_info = state.shape_report.node_shapes.get(&node.id);
+            let has_shape_error = shape_info.map(|s| !s.is_valid).unwrap_or(false);
+            let finding_count = state
+                .advisor_findings
+                .iter()
+                .filter(|f| {
+                    f.target_id.as_deref() == Some(&node.id)
+                        && f.severity >= AdvisorySeverity::Warning
+                })
+                .count();
+
             let bg_color = if !is_active {
                 Color32::from_rgb(20, 23, 30)
             } else if is_selected {
@@ -385,7 +411,11 @@ impl CanvasNodeView {
                 Color32::from_rgb(26, 30, 42)
             };
 
-            let border_stroke = if !is_active {
+            let border_stroke = if has_shape_error {
+                Stroke::new(2.0, Color32::from_rgb(255, 90, 90))
+            } else if finding_count > 0 {
+                Stroke::new(1.8, Color32::from_rgb(255, 180, 50))
+            } else if !is_active {
                 Stroke::new(1.0, Color32::from_rgb(70, 60, 60))
             } else if is_selected {
                 Stroke::new(2.0, Color32::from_rgb(100, 180, 255))
@@ -403,7 +433,11 @@ impl CanvasNodeView {
 
             let header_height = 28.0 * zoom;
             let header_rect = Rect::from_min_size(screen_pos, Vec2::new(card_width, header_height));
-            let header_bg = if !is_active {
+            let header_bg = if has_shape_error {
+                Color32::from_rgb(52, 28, 32)
+            } else if finding_count > 0 && !is_selected {
+                Color32::from_rgb(48, 38, 26)
+            } else if !is_active {
                 Color32::from_rgb(28, 30, 36)
             } else if is_selected {
                 Color32::from_rgb(48, 60, 86)
@@ -442,8 +476,27 @@ impl CanvasNodeView {
                 PrecisionFormat::INT8Sym => Color32::from_rgb(220, 100, 220),
                 _ => Color32::from_rgb(100, 220, 140),
             };
+
+            let prec_x_offset = if has_shape_error || finding_count > 0 {
+                let (warn_txt, warn_col) = if has_shape_error {
+                    (bi::EXCLAMATION_TRIANGLE_FILL, Color32::from_rgb(255, 100, 100))
+                } else {
+                    (bi::EXCLAMATION_TRIANGLE, Color32::from_rgb(255, 190, 60))
+                };
+                painter.text(
+                    header_rect.max - Vec2::new(8.0 * zoom, 14.0 * zoom),
+                    egui::Align2::RIGHT_CENTER,
+                    warn_txt,
+                    egui::FontId::proportional(11.0 * zoom),
+                    warn_col,
+                );
+                26.0 * zoom
+            } else {
+                8.0 * zoom
+            };
+
             painter.text(
-                header_rect.max - Vec2::new(8.0, 14.0) * zoom,
+                header_rect.max - Vec2::new(prec_x_offset, 14.0 * zoom),
                 egui::Align2::RIGHT_CENTER,
                 format!("{:?}", prec),
                 egui::FontId::monospace(9.0 * zoom),
@@ -565,16 +618,42 @@ impl CanvasNodeView {
                         );
                     });
                     if let Some(shape_info) = state.shape_report.node_shapes.get(&node.id) {
-                        let shape_str = shape_info
+                        let in_str = shape_info
+                            .input_shape
+                            .as_ref()
+                            .map(|s| s.display())
+                            .unwrap_or_else(|| "[?]".to_string());
+                        let out_str = shape_info
                             .output_shape
                             .as_ref()
                             .map(|s| s.display())
-                            .unwrap_or_else(|| "Unknown".to_string());
+                            .unwrap_or_else(|| "[?]".to_string());
                         ui.label(
-                            RichText::new(format!("Inferred Shape: {}", shape_str))
+                            RichText::new(format!("Tensor Flow: {in_str} ──▶ {out_str}"))
                                 .monospace()
-                                .size(11.0)
+                                .size(10.5)
                                 .color(Color32::from_rgb(110, 220, 255)),
+                        );
+                        if !shape_info.is_valid {
+                            if let Some(ref err) = shape_info.error {
+                                ui.label(
+                                    RichText::new(format!("⚠️ Shape Mismatch: {err}"))
+                                        .size(10.5)
+                                        .color(Color32::from_rgb(255, 110, 110))
+                                        .strong(),
+                                );
+                            }
+                        }
+                    }
+                    for f in state
+                        .advisor_findings
+                        .iter()
+                        .filter(|f| f.target_id.as_deref() == Some(&node.id))
+                    {
+                        ui.label(
+                            RichText::new(format!("⚠️ {}: {}", f.title, f.description))
+                                .size(10.5)
+                                .color(Color32::from_rgb(255, 190, 80)),
                         );
                     }
                     let flops = node.operator.compute_flops(2048);
@@ -815,11 +894,30 @@ impl CanvasNodeView {
             ui.separator();
 
             if ui
+                .small_button(format!("{} Fit", bi::ASPECT_RATIO))
+                .on_hover_text("Fit and center all nodes to view (F)")
+                .clicked()
+            {
+                state.fit_view_to_nodes(rect.size());
+            }
+
+            if ui
                 .small_button(format!("{} Auto-Layout", bi::CROSSHAIR))
                 .on_hover_text("Center camera and arrange Input, Layer, and Output nodes (Home)")
                 .clicked()
             {
                 state.auto_layout_nodes();
+            }
+
+            if ui
+                .selectable_label(
+                    state.minimap_visible,
+                    format!("{} Map", bi::MAP),
+                )
+                .on_hover_text("Toggle Interactive Graph Mini-Map Navigator (M)")
+                .clicked()
+            {
+                state.toggle_minimap();
             }
 
             ui.separator();
@@ -864,6 +962,13 @@ impl CanvasNodeView {
                         .strong(),
                 );
                 if ui
+                    .small_button(bi::CROSSHAIR)
+                    .on_hover_text("Center View on Selected Layer (Z)")
+                    .clicked()
+                {
+                    state.center_on_node(&sel_id, rect.size());
+                }
+                if ui
                     .small_button(bi::ARROW_UP)
                     .on_hover_text("Move Layer Earlier in Graph")
                     .clicked()
@@ -879,7 +984,7 @@ impl CanvasNodeView {
                 }
                 if ui
                     .small_button(bi::COPY)
-                    .on_hover_text("Duplicate Selected Layer")
+                    .on_hover_text("Duplicate Selected Layer (Ctrl+D)")
                     .clicked()
                 {
                     state.duplicate_selected_node();
@@ -898,13 +1003,16 @@ impl CanvasNodeView {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new(
-                        "Pan: Middle-Drag / Alt+Drag • Zoom: Scroll • Click I/O or Layer: Inspect",
+                        "Pan: Mid/Alt+Drag • Zoom: Scroll • F: Fit • Z: Focus • M: Map • Del: Delete",
                     )
                     .size(10.5)
                     .color(Color32::from_rgb(150, 165, 190)),
                 );
             });
         });
+
+        // 5. Interactive Graph Mini-Map Navigator
+        self.draw_minimap(ui, &painter, rect, state);
 
         // 5. If canvas has no computation layers, render a compact Quick-Start Card at bottom-center
         if state.spec.graph.nodes.is_empty() {
@@ -1013,6 +1121,161 @@ impl CanvasNodeView {
                     .color(Color32::from_rgb(160, 170, 190)),
                 );
             });
+        }
+    }
+
+    fn draw_minimap(
+        &self,
+        ui: &mut egui::Ui,
+        painter: &egui::Painter,
+        canvas_rect: Rect,
+        state: &mut StudioState,
+    ) {
+        if !state.minimap_visible || state.spec.graph.nodes.is_empty() {
+            return;
+        }
+
+        let map_w = 190.0f32;
+        let map_h = 115.0f32;
+        let map_margin = 14.0f32;
+        let map_rect = Rect::from_min_size(
+            canvas_rect.max - Vec2::new(map_w + map_margin, map_h + map_margin),
+            Vec2::new(map_w, map_h),
+        );
+
+        // Background
+        painter.rect_filled(
+            map_rect,
+            CornerRadius::same(6),
+            Color32::from_rgba_premultiplied(16, 20, 30, 225),
+        );
+        painter.rect_stroke(
+            map_rect,
+            CornerRadius::same(6),
+            Stroke::new(1.0, Color32::from_rgb(50, 65, 95)),
+            egui::epaint::StrokeKind::Inside,
+        );
+
+        // Compute canvas-space bounding box of all nodes
+        let mut min_pos = Pos2::new(f32::MAX, f32::MAX);
+        let mut max_pos = Pos2::new(f32::MIN, f32::MIN);
+        let card_w = 235.0;
+        let card_h = 92.0;
+
+        for pos in state.node_positions.values() {
+            min_pos.x = min_pos.x.min(pos.x);
+            min_pos.y = min_pos.y.min(pos.y);
+            max_pos.x = max_pos.x.max(pos.x + card_w);
+            max_pos.y = max_pos.y.max(pos.y + card_h);
+        }
+
+        if min_pos.x >= max_pos.x || min_pos.y >= max_pos.y {
+            return;
+        }
+
+        let pad = 60.0;
+        let bbox = Rect::from_min_max(
+            Pos2::new(min_pos.x - pad, min_pos.y - pad),
+            Pos2::new(max_pos.x + pad, max_pos.y + pad),
+        );
+
+        let inner_map = map_rect.shrink(8.0);
+        let scale_x = inner_map.width() / bbox.width().max(1.0);
+        let scale_y = inner_map.height() / bbox.height().max(1.0);
+        let map_scale = scale_x.min(scale_y);
+
+        let map_to_screen = |canvas_pt: Pos2| -> Pos2 {
+            let offset = (canvas_pt - bbox.min) * map_scale;
+            inner_map.min + offset
+        };
+
+        // Draw miniature node boxes
+        for (idx, input) in state.spec.inputs.iter().enumerate() {
+            let in_key = format!("__input__:{}", input.id);
+            let in_pos = state
+                .node_positions
+                .get(&in_key)
+                .copied()
+                .unwrap_or(Pos2::new(40.0, 110.0 + (idx as f32 * 140.0)));
+            let pt = map_to_screen(in_pos);
+            let chip_rect = Rect::from_min_size(
+                pt,
+                Vec2::new(card_w * map_scale, card_h * map_scale).max(Vec2::new(3.0, 3.0)),
+            );
+            painter.rect_filled(chip_rect, 1.0, Color32::from_rgb(70, 180, 240));
+        }
+
+        for node in &state.spec.graph.nodes {
+            let pos = state.get_node_pos(&node.id);
+            let pt = map_to_screen(pos);
+            let chip_rect = Rect::from_min_size(
+                pt,
+                Vec2::new(card_w * map_scale, card_h * map_scale).max(Vec2::new(3.0, 3.0)),
+            );
+            let is_sel = state.selected_node_id.as_deref() == Some(&node.id);
+            let chip_color = if is_sel {
+                Color32::from_rgb(255, 220, 100)
+            } else {
+                Color32::from_rgb(90, 130, 210)
+            };
+            painter.rect_filled(chip_rect, 1.0, chip_color);
+        }
+
+        for (idx, output) in state.spec.outputs.iter().enumerate() {
+            let out_key = format!("__output__:{}", output.id);
+            let out_pos = state
+                .node_positions
+                .get(&out_key)
+                .copied()
+                .unwrap_or(Pos2::new(600.0, 110.0 + (idx as f32 * 140.0)));
+            let pt = map_to_screen(out_pos);
+            let chip_rect = Rect::from_min_size(
+                pt,
+                Vec2::new(card_w * map_scale, card_h * map_scale).max(Vec2::new(3.0, 3.0)),
+            );
+            painter.rect_filled(chip_rect, 1.0, Color32::from_rgb(100, 225, 145));
+        }
+
+        // Camera Frustum
+        let cam_canvas_min = -state.pan_offset / state.zoom_level;
+        let cam_canvas_max = (canvas_rect.size() - state.pan_offset) / state.zoom_level;
+        let cam_screen_min = map_to_screen(Pos2::new(cam_canvas_min.x, cam_canvas_min.y));
+        let cam_screen_max = map_to_screen(Pos2::new(cam_canvas_max.x, cam_canvas_max.y));
+        let cam_rect = Rect::from_min_max(cam_screen_min, cam_screen_max).intersect(map_rect);
+
+        painter.rect_filled(
+            cam_rect,
+            2.0,
+            Color32::from_rgba_premultiplied(100, 180, 255, 35),
+        );
+        painter.rect_stroke(
+            cam_rect,
+            2.0,
+            Stroke::new(1.2, Color32::from_rgb(100, 180, 255)),
+            egui::epaint::StrokeKind::Inside,
+        );
+
+        // Header tag
+        painter.text(
+            map_rect.min + Vec2::new(6.0, 4.0),
+            egui::Align2::LEFT_TOP,
+            "MINI-MAP",
+            egui::FontId::monospace(8.5),
+            Color32::from_rgb(130, 150, 185),
+        );
+
+        // Interactivity: click or drag to center camera
+        let map_resp = ui.interact(
+            map_rect,
+            Id::new("canvas_minimap_interactive"),
+            Sense::click_and_drag(),
+        );
+        if map_resp.clicked() || map_resp.dragged() {
+            if let Some(pos) = map_resp.interact_pointer_pos() {
+                let canvas_pos = bbox.min + (pos - inner_map.min) / map_scale;
+                state.pan_offset =
+                    (canvas_rect.size() * 0.5) - (canvas_pos.to_vec2() * state.zoom_level);
+            }
         }
     }
 
