@@ -550,3 +550,118 @@ pub fn render_storage_modal(app: &mut AiDesignerApp, ui: &mut egui::Ui) {
         app.show_storage_modal = false;
     }
 }
+
+pub fn render_shortcuts_modal(ctx: &egui::Context, is_open: &mut bool) {
+    if !*is_open {
+        return;
+    }
+    let mut open = true;
+    let screen = ctx.viewport_rect();
+    let win_w = (screen.width() - 24.0).clamp(360.0, 640.0);
+    let win_h = (screen.height() - 40.0).clamp(380.0, 540.0);
+
+    egui::Window::new(format!("{} Keyboard Shortcuts & Canvas Gestures", bi::KEYBOARD))
+        .open(&mut open)
+        .resizable(true)
+        .collapsible(false)
+        .default_size(egui::vec2(win_w, win_h))
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.heading(
+                    egui::RichText::new("Interactive Studio Hotkeys")
+                        .size(15.0)
+                        .strong()
+                        .color(egui::Color32::from_rgb(110, 200, 255)),
+                );
+                ui.label(
+                    egui::RichText::new("Professional keyboard-first shortcuts for seamless model design, training, and surgery:")
+                        .size(11.5)
+                        .color(egui::Color32::from_rgb(170, 185, 210)),
+                );
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(6.0);
+
+                let render_group = |ui: &mut egui::Ui, title: &str, rows: &[(&str, &str)]| {
+                    ui.label(
+                        egui::RichText::new(title)
+                            .size(12.5)
+                            .strong()
+                            .color(egui::Color32::from_rgb(255, 205, 110)),
+                    );
+                    ui.add_space(2.0);
+                    egui::Grid::new(title)
+                        .num_columns(2)
+                        .spacing([24.0, 4.0])
+                        .show(ui, |ui| {
+                            for &(key, desc) in rows {
+                                ui.label(
+                                    egui::RichText::new(key)
+                                        .monospace()
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(130, 225, 160)),
+                                );
+                                ui.label(
+                                    egui::RichText::new(desc)
+                                        .size(11.5)
+                                        .color(egui::Color32::from_rgb(220, 230, 245)),
+                                );
+                                ui.end_row();
+                            }
+                        });
+                    ui.add_space(6.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                };
+
+                render_group(
+                    ui,
+                    "Global & Command Palette",
+                    &[
+                        ("Ctrl+K / ⌘K", "Open Global Command Palette (search layers, ops, blueprints, presets)"),
+                        ("F1 / ?", "Open this Keyboard Shortcuts cheat sheet"),
+                        ("Escape", "Close open modal or deselect current layer"),
+                    ],
+                );
+
+                render_group(
+                    ui,
+                    "Discipline Focus Modes",
+                    &[
+                        ("Alt+M", "Focus: Model Architecture (Graph, Outliner Tree, YAML Blueprint)"),
+                        ("Alt+T", "Focus: Training & Optimization (Curriculum, 4D Parallelism, Runner)"),
+                        ("Alt+S", "Focus: Model Surgery & Soups Lab (Abliteration, SLERP/TIES, Grafting)"),
+                    ],
+                );
+
+                render_group(
+                    ui,
+                    "Layout & Workspace Visibility",
+                    &[
+                        ("F11", "Toggle Zen Mode (maximize canvas by hiding all sidebars and docks)"),
+                        ("Alt+1", "Toggle Left Palette (Layers, Topic Catalog, Starters)"),
+                        ("Alt+2", "Toggle Bottom Dock (Diagnostics Advisor, Roofline, Pareto, Runner)"),
+                        ("Alt+3", "Toggle Right Inspector (Node properties, Hyperparameters, Precision)"),
+                    ],
+                );
+
+                render_group(
+                    ui,
+                    "Graph Canvas & Layer Editing",
+                    &[
+                        ("Ctrl+Z", "Undo last blueprint modification (50-state history)"),
+                        ("Ctrl+Y / Ctrl+Shift+Z", "Redo undone blueprint modification"),
+                        ("Home", "Auto-layout nodes in clean pipeline & center camera"),
+                        ("Ctrl+D", "Duplicate currently selected layer"),
+                        ("Delete / Backspace", "Delete currently selected layer"),
+                        ("Scroll", "Zoom canvas in / out (25% - 250%)"),
+                        ("Middle Drag / Alt+Drag", "Pan canvas viewport"),
+                    ],
+                );
+            });
+        });
+    if !open {
+        *is_open = false;
+    }
+}

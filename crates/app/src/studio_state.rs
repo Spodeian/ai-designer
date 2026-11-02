@@ -223,6 +223,10 @@ pub struct StudioState {
     pub left_panel_visible: bool,
     pub right_panel_visible: bool,
     pub bottom_dock_visible: bool,
+
+    // Undo / Redo History Stack
+    pub undo_stack: Vec<AiDesignSpec>,
+    pub redo_stack: Vec<AiDesignSpec>,
 }
 
 impl StudioState {
@@ -270,9 +274,54 @@ impl StudioState {
             left_panel_visible: true,
             right_panel_visible: true,
             bottom_dock_visible: true,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
         };
         studio.auto_layout_nodes();
         studio
+    }
+
+    /// Records a snapshot of the current spec before a mutating operation for undo/redo.
+    pub fn snapshot(&mut self) {
+        if self.undo_stack.len() >= 50 {
+            self.undo_stack.remove(0);
+        }
+        self.undo_stack.push(self.spec.clone());
+        self.redo_stack.clear();
+    }
+
+    /// Reverts to the previous blueprint state.
+    pub fn undo(&mut self) -> bool {
+        if let Some(prev) = self.undo_stack.pop() {
+            self.redo_stack.push(self.spec.clone());
+            self.spec = prev;
+            self.refresh_analyses();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Re-applies the next undone blueprint state.
+    pub fn redo(&mut self) -> bool {
+        if let Some(next) = self.redo_stack.pop() {
+            self.undo_stack.push(self.spec.clone());
+            self.spec = next;
+            self.refresh_analyses();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if undo history is available.
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+
+    /// Returns true if redo history is available.
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
     }
 
     /// Toggles the left palette / stage catalog panel.
@@ -413,6 +462,7 @@ impl StudioState {
         if new_idx < 0 || new_idx >= self.spec.graph.nodes.len() as isize {
             return false;
         }
+        self.snapshot();
         let target_idx = new_idx as usize;
         let id_a = self.spec.graph.nodes[idx].id.clone();
         let id_b = self.spec.graph.nodes[target_idx].id.clone();
@@ -437,6 +487,7 @@ impl StudioState {
             .nodes
             .iter()
             .position(|n| n.id == selected_id)?;
+        self.snapshot();
         let orig = self.spec.graph.nodes[idx].clone();
         let mut suffix = self.spec.graph.nodes.len() + 1;
         let mut new_id = format!("{}_copy_{}", orig.id, suffix);
@@ -467,6 +518,7 @@ impl StudioState {
         let Some(selected_id) = self.selected_node_id.take() else {
             return false;
         };
+        self.snapshot();
         let before = self.spec.graph.nodes.len();
         self.spec.graph.nodes.retain(|n| n.id != selected_id);
         self.node_positions.remove(&selected_id);

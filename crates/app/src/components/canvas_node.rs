@@ -815,6 +815,26 @@ impl CanvasNodeView {
             }
 
             ui.separator();
+
+            // Canvas Quick Undo / Redo
+            let can_undo = state.can_undo();
+            if ui
+                .add_enabled(can_undo, egui::Button::new(bi::ARROW_COUNTERCLOCKWISE).small())
+                .on_hover_text("Undo last blueprint change (Ctrl+Z)")
+                .clicked()
+            {
+                state.undo();
+            }
+            let can_redo = state.can_redo();
+            if ui
+                .add_enabled(can_redo, egui::Button::new(bi::ARROW_RIGHT).small())
+                .on_hover_text("Redo undone change (Ctrl+Y)")
+                .clicked()
+            {
+                state.redo();
+            }
+
+            ui.separator();
             ui.label(
                 egui::RichText::new(format!(
                     "{} {} In -> {} Layers -> {} Out",

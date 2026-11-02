@@ -153,6 +153,8 @@ pub struct AiDesignerApp {
     pub model_surgery_view: components::ModelSurgeryView,
     pub design_wizard_modal: components::DesignWizardModal,
     pub workspace_manager_modal: components::WorkspaceManagerModal,
+    pub command_palette: components::CommandPalette,
+    pub show_shortcuts_modal: bool,
 }
 
 pub type TemplateApp = AiDesignerApp;
@@ -200,6 +202,8 @@ impl Default for AiDesignerApp {
             model_surgery_view: components::ModelSurgeryView,
             design_wizard_modal: components::DesignWizardModal::default(),
             workspace_manager_modal: components::WorkspaceManagerModal::default(),
+            command_palette: components::CommandPalette::default(),
+            show_shortcuts_modal: false,
         }
     }
 }
@@ -433,8 +437,64 @@ impl AiDesignerApp {
                 self.studio.set_focus(StudioFocus::Surgery);
             }
 
-            // Right-aligned Layout Toggles & Quick HUD
+            // Right-aligned Layout Toggles, History, Shortcuts & Quick HUD
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Shortcuts Cheat Sheet Modal Trigger
+                if ui
+                    .button(format!("{} Shortcuts", bi::KEYBOARD))
+                    .on_hover_text("Open Interactive Keyboard Shortcuts Cheat Sheet (F1 / ?)")
+                    .clicked()
+                {
+                    self.show_shortcuts_modal = true;
+                }
+
+                // Command Palette Trigger
+                if ui
+                    .button(
+                        egui::RichText::new(format!("{} Ctrl+K", bi::SEARCH))
+                            .color(egui::Color32::from_rgb(130, 200, 255))
+                            .strong(),
+                    )
+                    .on_hover_text("Open Global Command Palette (Ctrl+K): instant search across layers, ops, blueprints, presets & commands")
+                    .clicked()
+                {
+                    self.command_palette.toggle();
+                }
+
+                // Redo Button
+                let can_redo = self.studio.can_redo();
+                let redo_count = self.studio.redo_stack.len();
+                let redo_text = if redo_count > 0 {
+                    format!("{} Redo ({redo_count})", bi::ARROW_RIGHT)
+                } else {
+                    format!("{} Redo", bi::ARROW_RIGHT)
+                };
+                if ui
+                    .add_enabled(can_redo, egui::Button::new(redo_text))
+                    .on_hover_text("Redo last undone blueprint modification (Ctrl+Y / Ctrl+Shift+Z)")
+                    .clicked()
+                {
+                    self.studio.redo();
+                }
+
+                // Undo Button
+                let can_undo = self.studio.can_undo();
+                let undo_count = self.studio.undo_stack.len();
+                let undo_text = if undo_count > 0 {
+                    format!("{} Undo ({undo_count})", bi::ARROW_COUNTERCLOCKWISE)
+                } else {
+                    format!("{} Undo", bi::ARROW_COUNTERCLOCKWISE)
+                };
+                if ui
+                    .add_enabled(can_undo, egui::Button::new(undo_text))
+                    .on_hover_text("Undo last blueprint modification (Ctrl+Z)")
+                    .clicked()
+                {
+                    self.studio.undo();
+                }
+
+                ui.separator();
+
                 // Zen Mode Toggle
                 let zen_active = !self.studio.left_panel_visible
                     && !self.studio.right_panel_visible
@@ -918,6 +978,12 @@ impl AiDesignerApp {
             &mut self.state.workspace_registry,
             &mut self.studio,
         );
+        self.command_palette.render(
+            ui.ctx(),
+            &mut self.studio,
+            &mut self.show_shortcuts_modal,
+        );
+        components::modals::render_shortcuts_modal(ui.ctx(), &mut self.show_shortcuts_modal);
     }
 
     fn apply_theme(&mut self, ctx: &egui::Context) {
@@ -932,8 +998,20 @@ impl AiDesignerApp {
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+        // Global Command Palette & Shortcuts Modal
+        if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::K)) {
+            self.command_palette.toggle();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
+            self.show_shortcuts_modal = !self.show_shortcuts_modal;
+        }
+
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if self.design_wizard_modal.is_open {
+            if self.command_palette.is_open {
+                self.command_palette.close();
+            } else if self.show_shortcuts_modal {
+                self.show_shortcuts_modal = false;
+            } else if self.design_wizard_modal.is_open {
                 self.design_wizard_modal.is_open = false;
             } else if self.studio.show_code_modal {
                 self.studio.show_code_modal = false;
@@ -958,6 +1036,17 @@ impl AiDesignerApp {
         }
 
         if self.state.active_page == AppPage::Designer && !ctx.egui_wants_keyboard_input() {
+            // Undo / Redo Shortcuts
+            if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && !i.modifiers.shift && i.key_pressed(egui::Key::Z)) {
+                self.studio.undo();
+            }
+            if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && (i.key_pressed(egui::Key::Y) || (i.modifiers.shift && i.key_pressed(egui::Key::Z)))) {
+                self.studio.redo();
+            }
+            if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::D)) {
+                self.studio.duplicate_selected_node();
+            }
+
             // Layout & Focus Shortcuts
             if ctx.input(|i| i.key_pressed(egui::Key::F11)) {
                 self.studio.toggle_zen_mode();
