@@ -1,0 +1,110 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "spiking_lif_neuromorphic_event_processor"
+  display_name: "Neuromorphic Spiking LIF Event-Camera (DVS) Processor (Surrogate Gradient SNN)"
+  domain: "NeuromorphicAndEdgeComputing"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "EdgeMCU_CortexM55"
+    max_vram_bytes: 16777216
+    peak_fp16_tflops: 0.05
+    peak_fp8_tflops: 0.1
+    memory_bandwidth_gbs: 2.0
+  tags: ["rare-ml", "neuromorphic", "spiking-neural-network", "snn", "spiking-lif", "surrogate-gradients", "event-camera", "edge-mcu"]
+
+inputs:
+  - id: "dvs_event_voxels"
+    name: "Asynchronous Dynamic Vision Sensor (DVS) Spike Polarity Voxels"
+    space:
+      kind: "continuous_vector"
+      dimension: 128
+      range: [-1.0, 1.0]
+    symbolic_shape: ["B", "T", 128]
+
+outputs:
+  - id: "event_gesture_classes"
+    name: "Membrane Potential Integrated Class Logits"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 11
+      is_causal: false
+    symbolic_shape: ["B", "T", 11]
+    loss: "focal"
+
+graph:
+  topology:
+    kind: "serial_stack"
+  nodes:
+    - id: "synaptic_stem"
+      name: "Quantized Synaptic Current Projection Stem"
+      operator:
+        type: "linear"
+        in_features: 128
+        out_features: 256
+        bias: false
+      precision: "int8_sym"
+    - id: "spiking_lif_layer_1"
+      name: "Spiking Leaky Integrate-and-Fire (LIF) Population 1 (tau=20ms)"
+      operator:
+        type: "spiking_lif"
+        d_model: 256
+        tau_mem: 20.0
+        v_threshold: 1.0
+        surrogate_slope: 25.0
+      precision: "binary_xnor"
+    - id: "spiking_lif_layer_2"
+      name: "Spiking Leaky Integrate-and-Fire (LIF) Population 2 (tau=15ms)"
+      operator:
+        type: "spiking_lif"
+        d_model: 256
+        tau_mem: 15.0
+        v_threshold: 0.8
+        surrogate_slope: 25.0
+      precision: "binary_xnor"
+    - id: "membrane_norm"
+      name: "Post-Spike Firing Rate RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 256
+        eps: 0.0001
+      precision: "fp16"
+    - id: "spike_rate_readout"
+      name: "Non-Spiking Membrane Potential Readout Integrator"
+      operator:
+        type: "linear"
+        in_features: 256
+        out_features: 11
+        bias: true
+      precision: "fp16"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.9
+    newton_schulz_steps: 5
+    weight_decay: 0.0
+  adamw:
+    lr: 0.001
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.001
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "int8_sym"
+  default_activation_precision: "binary_xnor"
+  reduction_precision: "fp16"
+  master_weight_precision: "fp32"

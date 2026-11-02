@@ -1,0 +1,136 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "recurrent_depth_ttt_titans_reasoner"
+  display_name: "Recurrent-Depth Latent Reasoner (Titans Memory + TTT + DiffAttn + PonderNet)"
+  domain: "LatentReasoningAndTestTimeCompute"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags: ["industry", "rare-ml", "latent-reasoning", "titans", "ttt", "test-time-training", "diff-attn", "recurrent-depth", "pondernet"]
+
+inputs:
+  - id: "problem_tokens"
+    name: "Mathematical & Algorithmic Reasoning Prompt Tokens"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 65536
+      is_causal: true
+    symbolic_shape: ["B", "T"]
+    coordinate_encoding:
+      kind: "rope_1d"
+      base: 50000.0
+
+outputs:
+  - id: "deliberated_logits"
+    name: "Post-Deliberation Coda Vocabulary Logits"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 65536
+      is_causal: true
+    symbolic_shape: ["B", "T", 65536]
+    loss: "grpo_outcome_reward"
+
+graph:
+  topology:
+    kind: "recurrent_depth_loop"
+    max_steps: 16
+    input_anchored: true
+    halting:
+      kind: "ponder_net_kl"
+      lambda_prior: 0.15
+  nodes:
+    - id: "prelude_embed"
+      name: "Prelude Token Embedding Stem (e_x Anchor)"
+      operator:
+        type: "embedding"
+        num_embeddings: 65536
+        embedding_dim: 1536
+      precision: "bf16"
+    - id: "titans_long_term_mem"
+      name: "Titans Surprise-Driven Neural Long-Term Memory"
+      operator:
+        type: "titans_memory"
+        d_model: 1536
+        memory_depth: 3
+      precision: "bf16"
+    - id: "ttt_fast_weight_layer"
+      name: "Test-Time Training (TTT) Inner Self-Supervised Fast-Weight Update"
+      operator:
+        type: "ttt"
+        d_model: 1536
+        mini_batch_size: 32
+      precision: "bf16"
+    - id: "recurrent_core_norm"
+      name: "Recurrent Core Pre-Norm Guard"
+      operator:
+        type: "rms_norm"
+        dim: 1536
+        eps: 0.000001
+      precision: "fp32"
+    - id: "diff_attn_denoiser"
+      name: "Differential Attention (Common-Mode Noise Cancellation)"
+      operator:
+        type: "diff_attn"
+        num_heads: 12
+        d_k: 128
+      precision: "bf16"
+    - id: "recurrent_core_swiglu"
+      name: "Looped Latent Deliberation SwiGLU Block"
+      operator:
+        type: "swiglu"
+        in_features: 1536
+        hidden_features: 4096
+      precision: "bf16"
+    - id: "coda_rms_norm"
+      name: "Coda Readout Normalization"
+      operator:
+        type: "rms_norm"
+        dim: 1536
+        eps: 0.000001
+      precision: "fp32"
+    - id: "coda_vocab_head"
+      name: "Coda Vocabulary Projection Head"
+      operator:
+        type: "linear"
+        in_features: 1536
+        out_features: 65536
+        bias: false
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.018
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.0
+  adamw:
+    lr: 0.0003
+    betas: [0.9, 0.95]
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.20
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: true
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

@@ -1,0 +1,186 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "attention_is_not_all_you_need_gmlp_hyena"
+  display_name: "53. Attention Is Not All You Need (gMLP + Hyena Rank-Preserving Mixer)"
+  domain: "LanguageAndFoundationModels"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "attention_is_not_all_you_need"
+    - "rank_collapse_prevention"
+    - "gmlp"
+    - "spatial_gating_unit"
+    - "hyena_hierarchy"
+    - "mlp_mixer"
+inputs:
+  - id: "token_ids"
+    name: "Input Token Sequence [B, T]"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 32000
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "next_token_logits"
+    name: "Rank-Preserved Next-Token Logits [B, T, 32000]"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 32000
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 32000
+    constraint:
+      kind: "direct_linear"
+    loss: "cross_entropy"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.1
+  nodes:
+    - id: "token_embed"
+      name: "Input Token Embedding (32000 -> 512)"
+      operator:
+        type: "embedding"
+        num_embeddings: 32000
+        embedding_dim: 512
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "pre_gmlp_norm"
+      name: "Pre-Gating RMSNorm Guard"
+      operator:
+        type: "rms_norm"
+        dim: 512
+        eps: 0.00001
+      precision: "bf16"
+      modular_role: "standard_backbone"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "gmlp_sgu_hyena_stage1"
+      name: "gMLP Spatial Gating Unit & Hyena Order-2 Implicit Long Convolution"
+      operator:
+        type: "attention_free_gated_mlp"
+        d_model: 512
+        seq_len: 1024
+        filter_order: 2
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "convnext_local_token_mixer"
+      name: "ConvNeXt-V2 Depthwise-Separable Local Token Mixer + GRN"
+      operator:
+        type: "conv_ne_xt_v2_block"
+        dim: 512
+        kernel_size: 7
+        mlp_ratio: 4.0
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "alternate_choice"
+        group_id: "token_mixer_family"
+        option_name: "ConvNeXt-V2 Local Depthwise Mixer"
+        is_active: true
+      metadata: {}
+    - id: "gmlp_sgu_hyena_stage2"
+      name: "Deep Hyena Order-3 Multiplicative Polynomial Filter Mixer"
+      operator:
+        type: "attention_free_gated_mlp"
+        d_model: 512
+        seq_len: 1024
+        filter_order: 3
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "rank_preserving_swiglu"
+      name: "Rank-Collapse Prevention SwiGLU Channel Mixer (Dong et al. Skip + FFN)"
+      operator:
+        type: "swiglu"
+        in_features: 512
+        hidden_features: 1536
+      precision: "bf16"
+      modular_role: "standard_backbone"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "squared_relu_sparse_act"
+      name: "Primer Squared-ReLU High-Selectivity Channel Nonlinearity"
+      operator:
+        type: "activation"
+        kind: "squared_re_l_u"
+      precision: "bf16"
+      modular_role: "standard_backbone"
+      execution_condition:
+        kind: "optional_adapter"
+        adapter_tag: "primer_squared_relu_head"
+        enabled_by_default: true
+      metadata: {}
+    - id: "lm_readout_head"
+      name: "Rank-Preserved Vocabulary Projection Head (512 -> 32000)"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 32000
+        bias: false
+      precision: "fp32"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+  connections: []
+training:
+  optimizer_family: "muon_adam_w_partitioned"
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

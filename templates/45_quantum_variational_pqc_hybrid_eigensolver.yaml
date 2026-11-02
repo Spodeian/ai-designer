@@ -1,0 +1,127 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "quantum_variational_pqc_hybrid_eigensolver"
+  display_name: "Hybrid Quantum Neural Network (QNN) & Variational Eigensolver (PQC-VQE)"
+  domain: "QuantumAndPhysicalComputing"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "quantum_neural_network"
+    - "pqc"
+    - "vqe"
+    - "pauli_rotations"
+    - "data_reuploading"
+    - "parameter_shift_rule"
+inputs:
+  - id: "molecular_hamiltonian_features"
+    name: "Classical Molecular Geometry & Orbital Coupling Descriptor"
+    space:
+      kind: "continuous_vector"
+      dimension: 64
+      range:
+        - -3.14159
+        - 3.14159
+    symbolic_shape:
+      - "B"
+      - 64
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "ground_state_energy_expectation"
+    name: "Variational Ground-State Energy <psi(theta)|H|psi(theta)> (Hartree)"
+    space:
+      kind: "continuous_vector"
+      dimension: 1
+      range: null
+    symbolic_shape:
+      - "B"
+      - 1
+    constraint:
+      kind: "symplectic_hamiltonian_field"
+    loss: "symplectic_energy_conservation"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "classical_angle_pre_encoder"
+      name: "Classical Pre-Processing to 16-Qubit Bloch Sphere Angles"
+      operator:
+        type: "linear"
+        in_features: 64
+        out_features: 16
+        bias: true
+      precision: "fp64"
+      metadata: {}
+    - id: "pqc_ansatz_stage1"
+      name: "Hardware-Efficient SU(2) Pauli Ansatz & Ring-CNOT Entangler (16 Qubits)"
+      operator:
+        type: "quantum_variational_circuit"
+        num_qubits: 16
+        circuit_depth: 8
+        entanglement: "ring_cnot"
+      precision: "fp64"
+      metadata: {}
+    - id: "pqc_data_reupload_stage2"
+      name: "Data Re-Uploading Quantum Variational Layer (All-to-All CZ)"
+      operator:
+        type: "quantum_variational_circuit"
+        num_qubits: 16
+        circuit_depth: 8
+        entanglement: "all_to_all_cz"
+      precision: "fp64"
+      metadata: {}
+    - id: "pauli_z_hamiltonian_readout"
+      name: "Pauli-String Expectation Value Linear Combination Readout"
+      operator:
+        type: "linear"
+        in_features: 16
+        out_features: 1
+        bias: true
+      precision: "fp64"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.005
+    momentum: 0.9
+    newton_schulz_steps: 5
+    weight_decay: 0.0
+  adamw:
+    lr: 0.002
+    betas:
+      - 0.9
+      - 0.999
+    eps: 0.00000001
+    weight_decay: 0.0
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "fp64"
+  default_activation_precision: "fp64"
+  reduction_precision: "fp64"
+  master_weight_precision: "fp64"

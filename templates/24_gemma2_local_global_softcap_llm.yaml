@@ -1,0 +1,157 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "gemma2_local_global_softcap_llm"
+  display_name: "Gemma-2 / Gemma-3 Interleaved Local-Global + Sandwich-LN + Soft-Cap LLM"
+  domain: "FrontierIndustryLLM"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags: ["industry", "llm", "gemma-2", "gemma-3", "sliding-window", "logit-soft-cap", "sandwich-ln", "geglu"]
+
+inputs:
+  - id: "input_ids"
+    name: "Multilingual 256K-Vocab Token Stream"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 256000
+      is_causal: true
+    symbolic_shape: ["B", "T"]
+    coordinate_encoding:
+      kind: "rope_1d"
+      base: 10000.0
+
+outputs:
+  - id: "softcapped_logits"
+    name: "Tanh Soft-Capped Vocabulary Logits (Cap = 30.0)"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 256000
+      is_causal: true
+    symbolic_shape: ["B", "T", 256000]
+    loss: "cross_entropy"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "sandwich_ln"
+    layer_scale_init: 0.0
+  nodes:
+    - id: "gemma_embed"
+      name: "Scaled SentencePiece Token Embedding (256,000)"
+      operator:
+        type: "embedding"
+        num_embeddings: 256000
+        embedding_dim: 2304
+      precision: "bf16"
+    - id: "local_pre_norm"
+      name: "Local Layer Sandwich Pre-RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2304
+        eps: 0.000001
+      precision: "fp32"
+    - id: "local_sliding_window_attn"
+      name: "Local Sliding-Window Attention (4096 Window + 4 Sink Tokens)"
+      operator:
+        type: "sliding_window_sink"
+        window_size: 4096
+        num_sink_tokens: 4
+      precision: "bf16"
+    - id: "local_geglu"
+      name: "Local Layer GeGLU Feedforward"
+      operator:
+        type: "geglu"
+        in_features: 2304
+        hidden_features: 9216
+      precision: "bf16"
+    - id: "global_pre_norm"
+      name: "Global Layer Sandwich Pre-RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2304
+        eps: 0.000001
+      precision: "fp32"
+    - id: "global_qk_norm"
+      name: "Query-Key Normalization Guard (d_head = 256)"
+      operator:
+        type: "qk_norm"
+        d_head: 256
+      precision: "fp32"
+    - id: "global_gqa"
+      name: "Global Grouped-Query Attention (9 Q / 3 KV Heads)"
+      operator:
+        type: "gqa"
+        num_q_heads: 9
+        num_kv_heads: 3
+        d_k: 256
+      precision: "bf16"
+    - id: "attn_soft_cap"
+      name: "Attention Score Tanh Soft-Cap (Cap = 50.0)"
+      operator:
+        type: "logit_soft_cap"
+        cap_val: 50.0
+      precision: "bf16"
+    - id: "global_geglu"
+      name: "Global Layer GeGLU Feedforward"
+      operator:
+        type: "geglu"
+        in_features: 2304
+        hidden_features: 9216
+      precision: "bf16"
+    - id: "final_rms_norm"
+      name: "Terminal Pre-Readout RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2304
+        eps: 0.000001
+      precision: "fp32"
+    - id: "vocab_readout"
+      name: "Tied Vocabulary Projection Head"
+      operator:
+        type: "linear"
+        in_features: 2304
+        out_features: 256000
+        bias: false
+      precision: "bf16"
+    - id: "final_logit_soft_cap"
+      name: "Final Logit Tanh Soft-Capping Guard (Cap = 30.0)"
+      operator:
+        type: "logit_soft_cap"
+        cap_val: 30.0
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.00025
+    betas: [0.9, 0.95]
+    eps: 0.00000001
+    weight_decay: 0.1
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

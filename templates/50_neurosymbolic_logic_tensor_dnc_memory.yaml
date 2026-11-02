@@ -1,0 +1,143 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "neurosymbolic_logic_tensor_dnc_memory"
+  display_name: "50. Neurosymbolic Logic Tensor Network (LTN) & Differentiable Neural Computer (DNC)"
+  domain: "NeurosymbolicReasoningAndMemory"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "neurosymbolic"
+    - "logic_tensor_network"
+    - "differentiable_neural_computer"
+    - "external_matrix_memory"
+    - "lukasiewicz_tnorm"
+inputs:
+  - id: "symbolic_predicate_tokens"
+    name: "Relational Predicate & Program Token Stream"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 32768
+      max_seq_len: 4096
+    symbolic_shape:
+      - "B"
+      - "T"
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "rope_1d"
+      base: 10000.0
+    patching: null
+outputs:
+  - id: "verified_truth_assignments"
+    name: "Certified Clause Satisfaction Valuation"
+    space:
+      kind: "continuous_vector"
+      dimension: 128
+      range: null
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 128
+    constraint:
+      kind: "optnet_kkt"
+    loss: "fenchel_young"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "symbol_embedding"
+      name: "Predicate & Term Token Embedding"
+      operator:
+        type: "embedding"
+        num_embeddings: 32768
+        embedding_dim: 512
+      precision: "bf16"
+      metadata: {}
+    - id: "ltn_dnc_block_1"
+      name: "DNC External Matrix Memory + Łukasiewicz t-Norm Layer 1"
+      operator:
+        type: "neurosymbolic_logic_dnc"
+        d_model: 512
+        memory_slots: 256
+        t_norm: "lukasiewicz"
+      precision: "bf16"
+      metadata: {}
+    - id: "diff_attn_binder"
+      name: "Variable Binding Differential Attention"
+      operator:
+        type: "diff_attn"
+        num_heads: 8
+        d_k: 64
+      precision: "bf16"
+      metadata: {}
+    - id: "ltn_dnc_block_2"
+      name: "DNC External Matrix Memory + Product t-Norm Layer 2"
+      operator:
+        type: "neurosymbolic_logic_dnc"
+        d_model: 512
+        memory_slots: 256
+        t_norm: "product"
+      precision: "bf16"
+      metadata: {}
+    - id: "deduction_norm"
+      name: "Clause Satisfaction RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 512
+        eps: 0.00001
+      precision: "fp32"
+      metadata: {}
+    - id: "clause_mlp"
+      name: "Horn Clause Deduction SwiGLU FFN"
+      operator:
+        type: "swiglu"
+        in_features: 512
+        hidden_features: 1376
+      precision: "bf16"
+      metadata: {}
+    - id: "proof_head"
+      name: "First-Order Logic Truth Valuation Head"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 128
+        bias: false
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: true
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"

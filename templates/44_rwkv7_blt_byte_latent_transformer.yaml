@@ -1,0 +1,131 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "rwkv7_blt_byte_latent_transformer"
+  display_name: "Byte Latent Transformer (BLT) & RWKV-7 Generalized Delta-Rule Hybrid"
+  domain: "LanguageAndFoundationModels"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "byte_latent_transformer"
+    - "blt"
+    - "rwkv7"
+    - "gated_deltanet"
+    - "tokenizer_free"
+    - "dynamic_entropy_patching"
+inputs:
+  - id: "raw_utf8_bytes"
+    name: "Tokenizer-Free Raw UTF-8 Byte Stream (0..255)"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 256
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "next_byte_logits"
+    name: "Autoregressive Next-Byte Probability Distribution (256 Bytes)"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 256
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 256
+    constraint:
+      kind: "direct_linear"
+    loss: "cross_entropy"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "byte_embed"
+      name: "Local Raw Byte Embedding (256 -> 256)"
+      operator:
+        type: "embedding"
+        num_embeddings: 256
+        embedding_dim: 256
+      precision: "bf16"
+      metadata: {}
+    - id: "blt_entropy_patcher"
+      name: "BLT Dynamic Entropy Byte-to-Patch Cross-Attention Pooler"
+      operator:
+        type: "entropy_byte_patcher"
+        d_byte: 256
+        d_latent: 1024
+        entropy_threshold: 1.8
+      precision: "bf16"
+      metadata: {}
+    - id: "rwkv7_delta_backbone"
+      name: "RWKV-7 ('Goose') Generalized Delta-Rule State-Tracking Backbone"
+      operator:
+        type: "rwkv7_delta_rule"
+        d_model: 1024
+        num_heads: 16
+      precision: "bf16"
+      metadata: {}
+    - id: "latent_patch_swiglu"
+      name: "Latent Patch Channel-Mixing SwiGLU FFN"
+      operator:
+        type: "swiglu"
+        in_features: 1024
+        hidden_features: 2816
+      precision: "bf16"
+      metadata: {}
+    - id: "byte_unpatch_decoder"
+      name: "Cross-Attention Patch-to-Byte Readout Head (1024 -> 256)"
+      operator:
+        type: "linear"
+        in_features: 1024
+        out_features: 256
+        bias: false
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0006
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

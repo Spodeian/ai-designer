@@ -1,0 +1,113 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "liquid_cfc_drone_flight_controller"
+  display_name: "Liquid Time-Constant (CfC) Closed-Form Continuous Autonomous Flight Controller"
+  domain: "ContinuousTimeRoboticsAndControl"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "EdgeRobotics_JetsonOrin"
+    max_vram_bytes: 8589934592
+    peak_fp16_tflops: 275.0
+    peak_fp8_tflops: 550.0
+    memory_bandwidth_gbs: 204.8
+  tags: ["rare-ml", "liquid-networks", "cfc", "neural-ode", "robotics", "drone-control", "so3", "continuous-time"]
+
+inputs:
+  - id: "imu_lidar_telemetry"
+    name: "Irregularly Sampled IMU, Optical Flow & LiDAR Telemetry"
+    space:
+      kind: "time_series"
+      channels: 24
+      horizon: 32
+      stationary: true
+    symbolic_shape: ["B", 32, 24]
+    normalizer:
+      kind: "symlog"
+
+outputs:
+  - id: "safe_rotor_wrench_trajectory"
+    name: "Continuous SO(3) Attitude & Thrust Control Trajectory"
+    space:
+      kind: "rigid_body_trajectory"
+      horizon_steps: 32
+      dof_per_step: 6
+    symbolic_shape: ["B", 32, 6]
+    constraint:
+      kind: "continuous_rotation_6d"
+    loss: "smooth_l1"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.05
+  nodes:
+    - id: "sensor_stem"
+      name: "Symlog Telemetry Feature Lifting Stem"
+      operator:
+        type: "linear"
+        in_features: 24
+        out_features: 256
+        bias: true
+      precision: "fp16"
+    - id: "liquid_cfc_cell_1"
+      name: "Closed-Form Continuous-Time (CfC) Liquid Synapse Layer 1"
+      operator:
+        type: "liquid_neural_cfc"
+        d_model: 256
+        backbone_units: 256
+      precision: "fp16"
+    - id: "liquid_cfc_cell_2"
+      name: "Closed-Form Continuous-Time (CfC) Liquid Synapse Layer 2"
+      operator:
+        type: "liquid_neural_cfc"
+        d_model: 256
+        backbone_units: 256
+      precision: "fp16"
+    - id: "control_norm"
+      name: "Pre-Readout State Stabilization RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 256
+        eps: 0.00001
+      precision: "fp32"
+    - id: "so3_wrench_head"
+      name: "SO(3) Attitude & Thrust Command Readout Head"
+      operator:
+        type: "linear"
+        in_features: 256
+        out_features: 6
+        bias: true
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0005
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "fp16"
+  default_activation_precision: "fp16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

@@ -1,0 +1,30 @@
+[package]
+name = "ai-designer-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Dedicated headless CLI for AI Designer: compilation, packaging, linting, importing, Pareto search, training planning, and verification"
+
+[lib]
+name = "ai_designer_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aid"
+path = "src/bin/aid.rs"
+
+[[bin]]
+name = "ai-designer"
+path = "src/bin/ai_designer.rs"
+
+[dependencies]
+shared = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+spodeian-telemetry = { workspace = true }
+mimalloc = "0.1"
+
+[dev-dependencies]
+serde_json = { workspace = true }

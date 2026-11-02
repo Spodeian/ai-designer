@@ -1,0 +1,129 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "continuous_normalizing_flow_ffjord_copula"
+  display_name: "48. Continuous Normalizing Flow (FFJORD) & Neural Vine Copula Density Estimator"
+  domain: "ExactLikelihoodFlowsAndCopulas"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 165.2
+    peak_fp8_tflops: 330.3
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "continuous_normalizing_flow"
+    - "ffjord"
+    - "hutchinson_trace"
+    - "vine_copula"
+    - "exact_likelihood"
+inputs:
+  - id: "base_manifold_samples"
+    name: "Continuous State / Financial Return Vector"
+    space:
+      kind: "continuous_vector"
+      dimension: 256
+      range: null
+    symbolic_shape:
+      - "B"
+      - 256
+    normalizer:
+      kind: "symlog"
+    coordinate_encoding:
+      kind: "random_fourier_features"
+      num_features: 64
+      scale: 1.0
+    patching: null
+outputs:
+  - id: "exact_density_quantiles"
+    name: "Invertible Pullback Density & Tail Quantiles"
+    space:
+      kind: "continuous_vector"
+      dimension: 256
+      range: null
+    symbolic_shape:
+      - "B"
+      - 256
+    constraint:
+      kind: "quantile_crps_gpd"
+      quantiles:
+        - 0.05
+        - 0.5
+        - 0.95
+    loss: "quantile_crps"
+graph:
+  topology:
+    kind: "reversible_split_stream"
+  nodes:
+    - id: "ffjord_cnf_stage_1"
+      name: "FFJORD Continuous Normalizing Flow Block 1 (Hutchinson Trace)"
+      operator:
+        type: "continuous_normalizing_flow"
+        dim: 256
+        hutchinson_samples: 4
+      precision: "fp32"
+      metadata: {}
+    - id: "cnf_norm_1"
+      name: "Invertible ActNorm / LayerNorm"
+      operator:
+        type: "layer_norm"
+        dim: 256
+        eps: 0.00001
+      precision: "fp32"
+      metadata: {}
+    - id: "ffjord_cnf_stage_2"
+      name: "FFJORD Continuous Normalizing Flow Block 2 (Hutchinson Trace)"
+      operator:
+        type: "continuous_normalizing_flow"
+        dim: 256
+        hutchinson_samples: 4
+      precision: "fp32"
+      metadata: {}
+    - id: "copula_spline_coupling"
+      name: "Neural Vine Copula Rational-Quadratic Spline Coupling"
+      operator:
+        type: "kan_layer"
+        in_features: 256
+        out_features: 256
+        grid_size: 8
+        spline_order: 3
+      precision: "fp32"
+      metadata: {}
+    - id: "exact_log_density_head"
+      name: "Exact Log-Likelihood & Tail Quantile Readout"
+      operator:
+        type: "linear"
+        in_features: 256
+        out_features: 256
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0002
+    betas:
+      - 0.9
+      - 0.999
+    eps: 0.00000001
+    weight_decay: 0.0001
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.9995
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"

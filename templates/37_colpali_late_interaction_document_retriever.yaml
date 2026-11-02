@@ -1,0 +1,133 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "colpali_late_interaction_document_retriever"
+  display_name: "ColPali / ColQwen2 Late-Interaction Visual Document Retriever"
+  domain: "MultimodalAndCrossModal"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "colpali"
+    - "colbert"
+    - "late_interaction"
+    - "maxsim"
+    - "visual_document_retrieval"
+inputs:
+  - id: "document_page_image"
+    name: "Rendered PDF Document Page Image (448x448)"
+    space:
+      kind: "image_rgb"
+      resolution:
+        - 448
+        - 448
+      channels: 3
+    symbolic_shape:
+      - "B"
+      - 3
+      - 448
+      - 448
+    normalizer:
+      kind: "imagenet_normalize"
+    coordinate_encoding:
+      kind: "rope_2d_dynamic"
+      base: 10000.0
+    patching:
+      patch_size:
+        - 14
+        - 14
+      flatten_channels: true
+outputs:
+  - id: "multivector_patch_embeddings"
+    name: "L2-Normalized 128-D Multi-Vector Patch Embeddings for MaxSim"
+    space:
+      kind: "continuous_vector"
+      dimension: 128
+      range:
+        - -1.0
+        - 1.0
+    symbolic_shape:
+      - "B"
+      - 1024
+      - 128
+    constraint:
+      kind: "direct_linear"
+    loss: "infonce_contrastive"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "doc_patch_embed"
+      name: "Document Page Patch Linear Projection (14x14 -> 2048)"
+      operator:
+        type: "linear"
+        in_features: 588
+        out_features: 2048
+        bias: true
+      precision: "bf16"
+      metadata: {}
+    - id: "vlm_doc_encoder_attn"
+      name: "PaliGemma / Qwen2-VL Vision-Language Attention"
+      operator:
+        type: "gqa"
+        num_q_heads: 16
+        num_kv_heads: 4
+        d_k: 128
+      precision: "bf16"
+      metadata: {}
+    - id: "vlm_doc_encoder_mlp"
+      name: "Vision-Language GeGLU Feed-Forward"
+      operator:
+        type: "geglu"
+        in_features: 2048
+        hidden_features: 5632
+      precision: "bf16"
+      metadata: {}
+    - id: "colpali_maxsim_head"
+      name: "ColPali Multi-Vector Projection & Late-Interaction MaxSim (128-D)"
+      operator:
+        type: "colpali_max_sim"
+        d_model: 2048
+        proj_dim: 128
+      precision: "bf16"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0002
+    betas:
+      - 0.9
+      - 0.98
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

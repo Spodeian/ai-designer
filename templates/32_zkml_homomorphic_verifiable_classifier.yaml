@@ -1,0 +1,114 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "zkml_homomorphic_verifiable_classifier"
+  display_name: "Cryptographic zkML Finite-Field & CKKS Homomorphic Verifiable Classifier"
+  domain: "CryptographicAndVerifiableAI"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags: ["rare-ml", "zkml", "homomorphic-encryption", "ckks", "ibp-crown", "formal-verification", "evidential-dirichlet", "privacy"]
+
+inputs:
+  - id: "encrypted_private_features"
+    name: "CKKS Ring-LWE Encrypted Client Feature Vector"
+    space:
+      kind: "tabular_features"
+      num_continuous: 64
+      num_categorical: 0
+    symbolic_shape: ["B", 64]
+    normalizer:
+      kind: "ple"
+      num_bins: 16
+
+outputs:
+  - id: "verifiable_dirichlet_evidence"
+    name: "Zero-Knowledge Proven Evidential Dirichlet Belief Masses"
+    space:
+      kind: "continuous_vector"
+      dimension: 8
+    symbolic_shape: ["B", 8]
+    constraint:
+      kind: "evidential_dirichlet"
+      num_classes: 8
+    loss: "cross_entropy"
+
+graph:
+  topology:
+    kind: "serial_stack"
+  nodes:
+    - id: "ckks_encrypted_stem"
+      name: "CKKS Ring-LWE Homomorphic Ciphertext Linear Stem"
+      operator:
+        type: "linear"
+        in_features: 64
+        out_features: 256
+        bias: true
+      precision: "ckks"
+    - id: "kan_polynomial_basis"
+      name: "Low-Multiplicative-Depth KAN Polynomial Activation Layer (k = 2)"
+      operator:
+        type: "kan_layer"
+        in_features: 256
+        out_features: 256
+        grid_size: 4
+        spline_order: 2
+      precision: "ckks"
+    - id: "zkml_freivalds_gemm"
+      name: "zkML Prime Finite-Field F_p Matrix Projection (Freivalds Verified)"
+      operator:
+        type: "linear"
+        in_features: 256
+        out_features: 128
+        bias: false
+      precision: "zkml_fp"
+    - id: "crown_ibp_bound_guard"
+      name: "CROWN / Interval Bound Propagation (IBP) Certified Robustness Guard"
+      operator:
+        type: "rms_norm"
+        dim: 128
+        eps: 0.00001
+      precision: "ibp_crown"
+    - id: "evidential_readout_head"
+      name: "Verifiable Evidential Dirichlet Concentration Readout"
+      operator:
+        type: "linear"
+        in_features: 128
+        out_features: 8
+        bias: true
+      precision: "zkml_fp"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "zkml_fp"
+  default_activation_precision: "ckks"
+  reduction_precision: "ibp_crown"
+  master_weight_precision: "fp32"

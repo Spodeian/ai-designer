@@ -1,0 +1,161 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "deepseek_v3_r1_mla_moe_mtp"
+  display_name: "DeepSeek-V3 / R1 Frontier MLA + Aux-Loss-Free MoE + MTP"
+  domain: "FrontierIndustryLLM"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "Cluster_8xH800_NVLink"
+    max_vram_bytes: 687194767360
+    peak_fp16_tflops: 7916.0
+    peak_fp8_tflops: 15832.0
+    memory_bandwidth_gbs: 26800.0
+  tags: ["industry", "llm", "deepseek-v3", "deepseek-r1", "mla", "deepseek-moe", "aux-loss-free", "mtp", "fp8", "grpo"]
+
+inputs:
+  - id: "reasoning_tokens"
+    name: "Causal Token Stream with Decoupled RoPE"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 129280
+      is_causal: true
+    symbolic_shape: ["B", "T"]
+    coordinate_encoding:
+      kind: "decoupled_ro_pe"
+
+outputs:
+  - id: "next_and_mtp_logits"
+    name: "Primary & Multi-Token Prediction (MTP) Vocabulary Logits"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 129280
+      is_causal: true
+    symbolic_shape: ["B", "T", 129280]
+    loss: "grpo_outcome_reward"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.0
+  nodes:
+    - id: "token_embedding"
+      name: "Shared Token Vocabulary Embedding"
+      operator:
+        type: "embedding"
+        num_embeddings: 129280
+        embedding_dim: 2048
+      precision: "bf16"
+    - id: "dense_layer1_norm"
+      name: "First-Layer Pre-Attention RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.000001
+      precision: "fp32"
+    - id: "dense_layer1_qk_norm"
+      name: "Compressed Latent Q/K RMSNorm Guard"
+      operator:
+        type: "qk_norm"
+        d_head: 128
+      precision: "fp32"
+    - id: "dense_layer1_mla"
+      name: "Multi-Head Latent Attention (Low-Rank KV Compression)"
+      operator:
+        type: "mla"
+        num_heads: 16
+        d_latent_kv: 512
+        d_rope: 64
+        d_v: 128
+      precision: "fp8_e4m3"
+    - id: "dense_layer1_swiglu"
+      name: "Dense First-Layer SwiGLU FFN (Pre-MoE Warmup Stage)"
+      operator:
+        type: "swiglu"
+        in_features: 2048
+        hidden_features: 5632
+      precision: "fp8_e4m3"
+    - id: "moe_block_norm"
+      name: "MoE Stage Pre-Attention RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.000001
+      precision: "fp32"
+    - id: "moe_block_mla"
+      name: "DeepSeek-V3 Matrix-Absorbed MLA Block"
+      operator:
+        type: "mla"
+        num_heads: 16
+        d_latent_kv: 512
+        d_rope: 64
+        d_v: 128
+      precision: "fp8_e4m3"
+    - id: "deepseek_moe_router"
+      name: "DeepSeekMoE (256 Fine-Grained Routed + Shared + Aux-Loss-Free Bias)"
+      operator:
+        type: "deepseek_moe"
+        total_experts: 256
+        routed_k: 8
+        shared_experts: 1
+        d_model: 2048
+        d_ffn: 512
+        aux_loss_free_bias: true
+      precision: "fp8_e4m3"
+    - id: "mtp_sequential_head"
+      name: "Multi-Token Prediction (MTP) Causal Speculative Chain"
+      operator:
+        type: "multi_token_prediction"
+        d_model: 2048
+        vocab_size: 129280
+        num_predict_tokens: 2
+      precision: "bf16"
+    - id: "final_rms_norm"
+      name: "Terminal FP32 RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.000001
+      precision: "fp32"
+    - id: "lm_readout_head"
+      name: "Unembedded Vocabulary Logits Readout"
+      operator:
+        type: "linear"
+        in_features: 2048
+        out_features: 129280
+        bias: false
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.0
+  adamw:
+    lr: 0.00022
+    betas: [0.9, 0.95]
+    eps: 0.00000001
+    weight_decay: 0.1
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.02
+    stable_ratio: 0.70
+    decay_ratio: 0.28
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: true
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "fp8_e4m3"
+  default_activation_precision: "fp8_e4m3"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

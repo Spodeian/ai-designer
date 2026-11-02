@@ -1,0 +1,130 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "graphcast_spherical_icosahedral_weather"
+  display_name: "GraphCast / NeuralGCM Spherical Multi-Mesh Global Weather Forecaster"
+  domain: "PhysicsAndEarthSystemAI"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "graphcast"
+    - "neuralgcm"
+    - "fourcastnet"
+    - "icosahedral_mesh"
+    - "weather_forecasting"
+    - "spherical_gnn"
+inputs:
+  - id: "era5_atmospheric_state"
+    name: "ERA5 Global Atmospheric State (37 Pressure Levels x 6 Variables)"
+    space:
+      kind: "coordinate_field"
+      domain_dim: 3
+      time_dependent: true
+    symbolic_shape:
+      - "B"
+      - 40962
+      - 227
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+    coordinate_encoding:
+      kind: "random_fourier_features"
+      num_features: 128
+      scale: 1.0
+    patching: null
+outputs:
+  - id: "predicted_atmospheric_tendency"
+    name: "6-Hour Global Atmospheric State Increment (Mass & Energy Conserving)"
+    space:
+      kind: "coordinate_field"
+      domain_dim: 3
+      time_dependent: true
+    symbolic_shape:
+      - "B"
+      - 40962
+      - 227
+    constraint:
+      kind: "curl_free_vector_field"
+    loss: "sobolev_h1_physics_residual"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "grid2mesh_encoder"
+      name: "Lat-Lon Grid to 6x-Refined Icosahedral Mesh Encoder (227 -> 512)"
+      operator:
+        type: "linear"
+        in_features: 227
+        out_features: 512
+        bias: true
+      precision: "bf16"
+      metadata: {}
+    - id: "multi_mesh_processor"
+      name: "Multi-Resolution Icosahedral Spherical Message-Passing Processor"
+      operator:
+        type: "spherical_mesh_gnn"
+        d_node: 512
+        d_edge: 512
+        mesh_refinement_level: 6
+      precision: "bf16"
+      metadata: {}
+    - id: "spherical_fno_filter"
+      name: "Spherical Fourier Spectral Filtering Layer"
+      operator:
+        type: "fourier_neural_operator"
+        modes:
+          - 32
+          - 32
+        width: 512
+      precision: "fp32"
+      metadata: {}
+    - id: "mesh2grid_decoder"
+      name: "Icosahedral Mesh to Global Lat-Lon Tendency Decoder (512 -> 227)"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 227
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.001
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

@@ -1,0 +1,28 @@
+[package]
+name = "ai-designer-bridge"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Multi-Backend Exporter (PyTorch 2, JAX, Candle, wGPU, SIMD CPU) and Candle Bridge Engine for AI Designer Studio"
+
+[lib]
+name = "ai_designer_bridge"
+path = "src/lib.rs"
+
+[dependencies]
+shared = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+miniz_oxide = { workspace = true }
+crc32fast = { workspace = true }
+candle-core = "0.8"
+candle-nn = "0.8"
+safetensors = { workspace = true }
+
+[dev-dependencies]
+shared = { workspace = true }

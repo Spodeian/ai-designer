@@ -1,0 +1,123 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "photonic_mzi_memristive_analog_accelerator"
+  display_name: "Coherent Photonic MZI Optical Mesh & Memristive Crossbar Neural Network"
+  domain: "PhotonicAndAnalogComputing"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "EdgeMCU_CortexM55"
+    max_vram_bytes: 16777216
+    peak_fp16_tflops: 0.05
+    peak_fp8_tflops: 0.1
+    memory_bandwidth_gbs: 2.0
+  tags:
+    - "photonic_neural_network"
+    - "mzi_clements_mesh"
+    - "optical_computing"
+    - "memristive_crossbar"
+    - "analog_in_memory"
+inputs:
+  - id: "optical_wdm_amplitudes"
+    name: "64-Channel Coherent Optical Waveguide Input Amplitudes"
+    space:
+      kind: "continuous_vector"
+      dimension: 64
+      range:
+        - -1.0
+        - 1.0
+    symbolic_shape:
+      - "B"
+      - 64
+    normalizer:
+      kind: "min_max"
+      min: -1.0
+      max: 1.0
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "photodetector_class_logits"
+    name: "High-Speed Photodetector & Transimpedance Amplifier Class Logits"
+    space:
+      kind: "continuous_vector"
+      dimension: 10
+      range: null
+    symbolic_shape:
+      - "B"
+      - 10
+    constraint:
+      kind: "direct_linear"
+    loss: "cross_entropy"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "clements_mzi_stage1"
+      name: "Coherent Clements 64x64 Mach-Zehnder Interferometer Unitary Mesh (U Sigma V^H)"
+      operator:
+        type: "photonic_mzi_mesh"
+        num_modes: 64
+        adc_bits: 8
+      precision: "int8"
+      metadata: {}
+    - id: "electro_optic_modulator"
+      name: "Electro-Optic Saturable Absorber Periodic Nonlinearity"
+      operator:
+        type: "snake"
+        frequency: 2.0
+      precision: "fp16"
+      metadata: {}
+    - id: "clements_mzi_stage2"
+      name: "Second-Stage Optical MZI Mesh & Memristive Crossbar Array"
+      operator:
+        type: "photonic_mzi_mesh"
+        num_modes: 64
+        adc_bits: 8
+      precision: "int8"
+      metadata: {}
+    - id: "tia_adc_readout"
+      name: "Photodiode Array + 8-Bit ADC Kirchhoff Readout Head"
+      operator:
+        type: "linear"
+        in_features: 64
+        out_features: 10
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.0
+  adamw:
+    lr: 0.001
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.00000001
+    weight_decay: 0.0
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "int8"
+  default_activation_precision: "fp16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

@@ -1,0 +1,111 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "hyperbolic_poincare_sheaf_gflownet"
+  display_name: "Hyperbolic Poincaré & Cellular Sheaf Combinatorial GFlowNet Sampler"
+  domain: "NonEuclideanAndTopologicalML"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags: ["rare-ml", "hyperbolic", "poincare-ball", "cellular-sheaf", "clifford-algebra", "gflownet", "trajectory-balance", "combinatorial"]
+
+inputs:
+  - id: "molecular_graph_topology"
+    name: "Heterophilic Molecular / Hierarchical Graph with RWPE"
+    space:
+      kind: "graph_relational"
+      node_features: 128
+      edge_features: 32
+      heterophilic: true
+    symbolic_shape: ["B", "N", 128]
+    coordinate_encoding:
+      kind: "rwpe_graph"
+      walk_steps: 16
+
+outputs:
+  - id: "trajectory_action_flows"
+    name: "GFlowNet Forward/Backward Trajectory Balance Action Probabilities"
+    space:
+      kind: "continuous_vector"
+      dimension: 64
+    symbolic_shape: ["B", "N", 64]
+    constraint:
+      kind: "entmax_15"
+    loss: "gflownet_trajectory_balance"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.05
+  nodes:
+    - id: "cellular_sheaf_diffusion"
+      name: "Cellular Sheaf Laplacian Transport (O(d) Stalk Restriction Maps)"
+      operator:
+        type: "cellular_sheaf_conv"
+        node_dim: 128
+        stalk_dim: 4
+      precision: "fp32"
+    - id: "hyperbolic_poincare_1"
+      name: "Hyperbolic Poincaré Ball Möbius Gyrovector Layer (c = 1.0)"
+      operator:
+        type: "hyperbolic_poincare_layer"
+        dim: 128
+        curvature_c: 1.0
+      precision: "fp32"
+    - id: "clifford_multivector_prod"
+      name: "Clifford Cl(3,0) Geometric Algebra Multivector Interaction"
+      operator:
+        type: "clifford_geometric_product"
+        p: 3
+        q: 0
+      precision: "fp32"
+    - id: "soft_sort_ranking"
+      name: "Differentiable Permutahedron SoftSort Topological Ordering"
+      operator:
+        type: "soft_sort_permutahedron"
+        num_items: 128
+      precision: "fp32"
+    - id: "gflownet_forward_flow_head"
+      name: "Reward-Proportional GFlowNet Action Flow Readout (P(x) propto R(x))"
+      operator:
+        type: "linear"
+        in_features: 128
+        out_features: 64
+        bias: true
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0005
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: true
+    activation_checkpointing: false
+  loss_balancing: "grad_norm"
+
+precision:
+  default_weight_precision: "fp32"
+  default_activation_precision: "fp32"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

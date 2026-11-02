@@ -1,0 +1,138 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "qmix_multi_agent_cfr_game_coordinator"
+  display_name: "51. Multi-Agent Monotonic QMIX Coordinator & Counterfactual Regret (CFR) Game Solver"
+  domain: "MultiAgentRLAndGameTheory"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 165.2
+    peak_fp8_tflops: 330.3
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "multi_agent_rl"
+    - "qmix"
+    - "monotonic_hypernetwork"
+    - "counterfactual_regret"
+    - "tarmac"
+inputs:
+  - id: "multi_agent_observations"
+    name: "Decentralized Multi-Agent Local Action-Observation Histories"
+    space:
+      kind: "continuous_vector"
+      dimension: 256
+      range: null
+    symbolic_shape:
+      - "B"
+      - 8
+      - 256
+    normalizer:
+      kind: "symlog"
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "monotonic_joint_q_values"
+    name: "IGM-Consistent Factored Action Values & Regret Strategy"
+    space:
+      kind: "continuous_vector"
+      dimension: 32
+      range: null
+    symbolic_shape:
+      - "B"
+      - 8
+      - 32
+    constraint:
+      kind: "monotonic"
+      positive_weights: true
+    loss: "grpo_outcome_reward"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "agent_history_ssm"
+      name: "Decentralized Agent Trajectory Mamba-2 SSD Encoder"
+      operator:
+        type: "mamba2_ssd"
+        d_model: 256
+        d_state: 64
+        d_conv: 4
+        expand: 2
+      precision: "bf16"
+      metadata: {}
+    - id: "agent_comm_attn"
+      name: "Inter-Agent TarMAC Targeted Communication Attention"
+      operator:
+        type: "gqa"
+        num_q_heads: 8
+        num_kv_heads: 2
+        d_k: 32
+      precision: "bf16"
+      metadata: {}
+    - id: "qmix_monotonic_hypernet"
+      name: "Monotonic QMIX Hypernetwork Value Mixer (dQ_tot / dQ_a >= 0)"
+      operator:
+        type: "multi_agent_qmix"
+        num_agents: 8
+        state_dim: 256
+        mixing_embed_dim: 256
+      precision: "fp32"
+      metadata: {}
+    - id: "cfr_regret_norm"
+      name: "Information-Set RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 256
+        eps: 0.00001
+      precision: "fp32"
+      metadata: {}
+    - id: "cfr_equilibrium_mlp"
+      name: "Counterfactual Regret Matching SwiGLU FFN"
+      operator:
+        type: "swiglu"
+        in_features: 256
+        hidden_features: 688
+      precision: "bf16"
+      metadata: {}
+    - id: "joint_q_and_strategy_head"
+      name: "Factored Joint Q_tot & Nash Strategy Readout"
+      operator:
+        type: "linear"
+        in_features: 256
+        out_features: 32
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.995
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"

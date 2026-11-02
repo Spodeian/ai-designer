@@ -1,0 +1,124 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "dreamerv3_rssm_imagination_world_model"
+  display_name: "DreamerV3 / MuZero Recurrent State-Space World Model (RSSM)"
+  domain: "ReinforcementLearningAndWorldModels"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "dreamerv3"
+    - "muzero"
+    - "world_model"
+    - "rssm"
+    - "categorical_latents"
+    - "symlog"
+inputs:
+  - id: "sensory_observations"
+    name: "Multi-Scale Sensory Observation Stream (Symlog Normalized)"
+    space:
+      kind: "continuous_vector"
+      dimension: 512
+      range: null
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 512
+    normalizer:
+      kind: "symlog"
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "imagined_policy_and_value"
+    name: "Symexp Two-Hot Critic Value & Actor Policy Distribution"
+    space:
+      kind: "continuous_vector"
+      dimension: 255
+      range: null
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 255
+    constraint:
+      kind: "direct_linear"
+    loss: "cross_entropy"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "rssm_world_core"
+      name: "DreamerV3 RSSM Core (Deterministic h_t + 32x32 Unimix Categorical z_t)"
+      operator:
+        type: "world_model_rssm"
+        d_model: 512
+        stochastic_classes: 32
+        stochastic_dim: 32
+      precision: "bf16"
+      metadata: {}
+    - id: "dynamics_transition_mlp"
+      name: "Latent Imagination Transition Predictor (p(z_hat_t | h_t))"
+      operator:
+        type: "swiglu"
+        in_features: 512
+        hidden_features: 1536
+      precision: "bf16"
+      metadata: {}
+    - id: "rms_norm_imagination"
+      name: "Imagination Horizon RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 512
+        eps: 0.00001
+      precision: "bf16"
+      metadata: {}
+    - id: "symexp_twohot_head"
+      name: "Symexp Two-Hot Distributional Value & Reward Readout (255 Bins)"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 255
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas:
+      - 0.9
+      - 0.999
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.85
+    decay_ratio: 0.1
+    min_lr_ratio: 0.1
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 100.0
+    ema_decay: 0.98
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

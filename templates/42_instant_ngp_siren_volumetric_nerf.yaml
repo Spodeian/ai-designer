@@ -1,0 +1,129 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "instant_ngp_siren_volumetric_nerf"
+  display_name: "Instant-NGP Multiresolution Hash Grid & SIREN Volumetric NeRF"
+  domain: "VisionAnd3DGeometry"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "instant_ngp"
+    - "siren"
+    - "nerf"
+    - "hash_grid"
+    - "implicit_neural_representation"
+    - "volume_rendering"
+inputs:
+  - id: "ray_sample_coordinates"
+    name: "5D Camera Ray Sample Coordinates (x, y, z, theta, phi)"
+    space:
+      kind: "coordinate_field"
+      domain_dim: 5
+      time_dependent: false
+    symbolic_shape:
+      - "B"
+      - 4096
+      - 5
+    normalizer:
+      kind: "min_max"
+      min: -1.0
+      max: 1.0
+    coordinate_encoding:
+      kind: "multires_hash_grid"
+      num_levels: 16
+      base_resolution: 16
+    patching: null
+outputs:
+  - id: "volumetric_radiance_sigma"
+    name: "Volumetric Density sigma & View-Dependent RGB Radiance (4-D)"
+    space:
+      kind: "continuous_vector"
+      dimension: 4
+      range:
+        - 0.0
+        - 1.0
+    symbolic_shape:
+      - "B"
+      - 4096
+      - 4
+    constraint:
+      kind: "direct_linear"
+    loss: "smooth_l1"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "hash_grid_mlp_in"
+      name: "16-Level Hash Grid Feature Fusion MLP (32 -> 128)"
+      operator:
+        type: "linear"
+        in_features: 32
+        out_features: 128
+        bias: true
+      precision: "fp16"
+      metadata: {}
+    - id: "siren_periodic_layer1"
+      name: "SIREN High-Frequency Periodic Activation (omega_0 = 30.0)"
+      operator:
+        type: "snake"
+        frequency: 30.0
+      precision: "fp16"
+      metadata: {}
+    - id: "radiance_color_mlp"
+      name: "Spherical Harmonics View-Conditioned Radiance MLP"
+      operator:
+        type: "swiglu"
+        in_features: 128
+        hidden_features: 256
+      precision: "fp16"
+      metadata: {}
+    - id: "volume_density_rgb_head"
+      name: "Volumetric Density (sigma) & RGB Emission Readout"
+      operator:
+        type: "linear"
+        in_features: 128
+        out_features: 4
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.0001
+  adamw:
+    lr: 0.01
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.000000000000001
+    weight_decay: 0.000001
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.02
+    stable_ratio: 0.68
+    decay_ratio: 0.3
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 95.0
+    max_norm: 1.0
+    ema_decay: 0.99
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "fp16"
+  default_activation_precision: "fp16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

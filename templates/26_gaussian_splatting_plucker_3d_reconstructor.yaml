@@ -1,0 +1,123 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "gaussian_splatting_plucker_3d_reconstructor"
+  display_name: "Large 3D Gaussian Splatting Reconstructor (Plücker Rays + ConvNeXt-V2 + 3DGS)"
+  domain: "Generative3DAndSpatialVision"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags: ["industry", "3d-generation", "gaussian-splatting", "plucker-rays", "convnext-v2", "lrm", "3dgs"]
+
+inputs:
+  - id: "multiview_plucker_rays"
+    name: "Multi-View RGB Patches + 6D Plücker Camera Ray Coordinates"
+    space:
+      kind: "image_rgb"
+      resolution: [512, 512]
+      channels: 9
+    symbolic_shape: ["B", 1024, 576]
+    normalizer:
+      kind: "imagenet_normalize"
+    coordinate_encoding:
+      kind: "plucker_rays"
+    patching:
+      patch_size: [8, 8]
+      flatten_channels: true
+
+outputs:
+  - id: "gaussian_splat_parameters"
+    name: "3D Gaussian Primitives (XYZ, Scale, SO(3) Rot, Opacity, SH Color)"
+    space:
+      kind: "continuous_vector"
+      dimension: 14
+    symbolic_shape: ["B", 1024, 14]
+    loss: "smooth_l1"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "ray_patch_stem"
+      name: "Plücker Ray & Image Patch Projection Stem"
+      operator:
+        type: "linear"
+        in_features: 576
+        out_features: 768
+        bias: true
+      precision: "bf16"
+    - id: "spatial_convnext"
+      name: "ConvNeXt-V2 Global Response Normalized Spatial Block"
+      operator:
+        type: "convnext_v2_block"
+        dim: 768
+        kernel_size: 7
+        mlp_ratio: 4.0
+      precision: "bf16"
+    - id: "multiview_cross_attn"
+      name: "Multi-View Epipolar Self/Cross-Attention"
+      operator:
+        type: "mha"
+        num_heads: 12
+        d_k: 64
+        d_v: 64
+        dropout: 0.0
+      precision: "bf16"
+    - id: "splat_mlp"
+      name: "Triplane & Splat Feature SwiGLU Block"
+      operator:
+        type: "swiglu"
+        in_features: 768
+        hidden_features: 2048
+      precision: "bf16"
+    - id: "gaussian_raster_bank"
+      name: "Differentiable 3D Gaussian Splatting Tile Rasterizer"
+      operator:
+        type: "gaussian_splatting_3d"
+        num_gaussians: 65536
+      precision: "fp32"
+    - id: "splat_attribute_head"
+      name: "14-DOF Gaussian Attribute Readout Head"
+      operator:
+        type: "linear"
+        in_features: 768
+        out_features: 14
+        bias: true
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0002
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

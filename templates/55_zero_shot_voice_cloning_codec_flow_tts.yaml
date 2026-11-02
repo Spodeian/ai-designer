@@ -1,0 +1,197 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "zero_shot_voice_cloning_codec_flow_tts"
+  display_name: "55. Zero-Shot Voice Cloning & Neural Codec Flow-Matching TTS (F5-TTS / VALL-E / CosyVoice)"
+  domain: "AudioSpeechAndSignalProcessing"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "voice_cloning"
+    - "zero_shot_tts"
+    - "f5_tts"
+    - "valle"
+    - "cosyvoice"
+    - "rvq_codec"
+    - "flow_matching"
+inputs:
+  - id: "phoneme_text_tokens"
+    name: "Target Text / Grapheme-to-Phoneme Token Sequence [B, T]"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 1024
+      is_causal: false
+    symbolic_shape:
+      - "B"
+      - "T"
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+  - id: "reference_speaker_audio_prompt"
+    name: "Zero-Shot 3-Second Reference Speaker Acoustic Prompt [B, T_ref, 512]"
+    space:
+      kind: "continuous_vector"
+      dimension: 512
+      range:
+        - -1.0
+        - 1.0
+    symbolic_shape:
+      - "B"
+      - 250
+      - 512
+    normalizer:
+      kind: "rev_in"
+      eps: 0.00001
+      affine: true
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "cloned_speech_rvq_acoustic_latents"
+    name: "Synthesized Speaker-Cloned Acoustic RVQ Latents & Mel Velocity Field"
+    space:
+      kind: "continuous_vector"
+      dimension: 512
+      range: null
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 512
+    constraint:
+      kind: "direct_linear"
+    loss: "ot_cfm"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.1
+  nodes:
+    - id: "text_phoneme_embed"
+      name: "Phoneme & Prosody Token Embedding Conformer (1024 -> 512)"
+      operator:
+        type: "embedding"
+        num_embeddings: 1024
+        embedding_dim: 512
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "convnext_duration_aligner"
+      name: "F5-TTS ConvNeXt-V2 Sway-Sampling Non-Autoregressive Alignment Stem"
+      operator:
+        type: "conv_ne_xt_v2_block"
+        dim: 512
+        kernel_size: 7
+        mlp_ratio: 4.0
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "voice_cloning_codec_core"
+      name: "In-Context Speaker Prompt Cross-Attention & 8-Codebook RVQ Acoustic Synthesizer"
+      operator:
+        type: "voice_cloning_codec_tts"
+        d_model: 512
+        num_rvq_codebooks: 8
+        speaker_embed_dim: 256
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "adaln_dit_flow_matching"
+      name: "Optimal-Transport Conditional Flow Matching (OT-CFM) DiT Velocity Estimator"
+      operator:
+        type: "ada_ln_zero_dit"
+        d_model: 512
+        num_heads: 8
+        cond_dim: 256
+        dual_stream_mmdit: false
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "snake_harmonic_vocoder"
+      name: "BigVGAN Periodic Snake Harmonic Phase-Coherent Vocoder Filter"
+      operator:
+        type: "snake"
+        frequency: 2.0
+      precision: "bf16"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "optional_adapter"
+        adapter_tag: "bigvgan_snake_vocoder_filter"
+        enabled_by_default: true
+      metadata: {}
+    - id: "acoustic_velocity_head"
+      name: "Continuous Acoustic Mel/RVQ Flow Velocity Readout (512 -> 512)"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 512
+        bias: true
+      precision: "fp32"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+  connections: []
+training:
+  optimizer_family: "adam_w_standard"
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0002
+    betas:
+      - 0.9
+      - 0.98
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.9999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "uncertainty_kendall_gal"
+  stages:
+    - stage_id: "stage_1_rvq_pretrain"
+      stage_name: "Stage 1: Multi-Stream RVQ Acoustic Token & Speaker Prompt Pretraining"
+      paradigm: "self_supervised_masked_modeling"
+      token_budget: 50000000000
+      sequence_length: 2048
+      lr_multiplier: 1.0
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_2_ot_cfm_tts"
+      stage_name: "Stage 2: Optimal-Transport Conditional Flow Matching (OT-CFM) Infilling"
+      paradigm: "flow_matching_rectified_flow"
+      token_budget: 25000000000
+      sequence_length: 4096
+      lr_multiplier: 0.5
+      freeze_policy: "full_trainable"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

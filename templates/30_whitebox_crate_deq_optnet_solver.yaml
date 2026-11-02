@@ -1,0 +1,112 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "whitebox_crate_deq_optnet_solver"
+  display_name: "White-Box CRATE Rate-Reduction + Implicit DEQ + OptNet KKT Convex Solver"
+  domain: "OptimizationAsArchitecture"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags: ["rare-ml", "white-box", "crate", "deq", "admm-net", "modern-hopfield", "optnet", "kkt", "implicit-layers"]
+
+inputs:
+  - id: "compressed_sensing_measurements"
+    name: "Under-Sampled Inverse Problem Measurements / Constraints"
+    space:
+      kind: "continuous_vector"
+      dimension: 512
+    symbolic_shape: ["B", 512]
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+
+outputs:
+  - id: "kkt_optimal_solution"
+    name: "Hard-Constrained KKT Quadratic Program Primal Solution"
+    space:
+      kind: "continuous_vector"
+      dimension: 128
+    symbolic_shape: ["B", 128]
+    constraint:
+      kind: "optnet_kkt"
+    loss: "fenchel_young"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.1
+  nodes:
+    - id: "crate_subspace_coding"
+      name: "CRATE White-Box Subspace Coding Rate Reduction + ISTA Block"
+      operator:
+        type: "crate"
+        d_model: 512
+        num_heads: 8
+        lambda_step: 0.1
+      precision: "fp32"
+    - id: "admm_proximal_stage"
+      name: "Unrolled ADMM-Net Proximal Multiplier Splitting (8 Stages)"
+      operator:
+        type: "admm_net"
+        num_stages: 8
+        rho: 0.5
+      precision: "fp32"
+    - id: "deq_fixed_point_solver"
+      name: "Deep Equilibrium (DEQ) Anderson-Accelerated Implicit Fixed-Point"
+      operator:
+        type: "deq"
+        d_model: 512
+        max_iters: 25
+        tolerance: 0.00001
+      precision: "fp32"
+    - id: "modern_hopfield_assoc"
+      name: "Continuous Modern Hopfield Energy Associative Memory (beta = 4.0)"
+      operator:
+        type: "modern_hopfield"
+        num_heads: 8
+        beta: 4.0
+      precision: "fp32"
+    - id: "optnet_qp_projection"
+      name: "OptNet Differentiable KKT Quadratic Program Projection Head"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 128
+        bias: true
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: true
+    activation_checkpointing: false
+  loss_balancing: "pcgrad"
+
+precision:
+  default_weight_precision: "fp32"
+  default_activation_precision: "fp32"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

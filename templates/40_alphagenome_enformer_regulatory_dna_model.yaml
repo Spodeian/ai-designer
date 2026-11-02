@@ -1,0 +1,134 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "alphagenome_enformer_regulatory_dna_model"
+  display_name: "AlphaGenome / Enformer Megabase Regulatory DNA & Chromatin Model"
+  domain: "GenomicsAndRegulatoryBiology"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "alphagenome"
+    - "enformer"
+    - "regulatory_genomics"
+    - "chromatin_accessibility"
+    - "splicing_eqtl"
+inputs:
+  - id: "dna_nucleotide_sequence"
+    name: "1-Megabase Genomic DNA Sequence (A, C, G, T, N)"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 5
+      is_causal: false
+    symbolic_shape:
+      - "B"
+      - 196608
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "rope_1d"
+      base: 100000.0
+    patching: null
+outputs:
+  - id: "epigenetic_regulatory_tracks"
+    name: "5,313 Epigenomic Tracks (RNA-seq, DNase, ChIP-seq, CAGE, Splicing)"
+    space:
+      kind: "continuous_vector"
+      dimension: 5313
+      range:
+        - 0.0
+        - 10000.0
+    symbolic_shape:
+      - "B"
+      - 1536
+      - 5313
+    constraint:
+      kind: "direct_linear"
+    loss: "smooth_l1"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "nucleotide_embed"
+      name: "One-Hot / Learned DNA Nucleotide Embedding"
+      operator:
+        type: "embedding"
+        num_embeddings: 5
+        embedding_dim: 768
+      precision: "bf16"
+      metadata: {}
+    - id: "multiscale_dna_wtconv"
+      name: "Multi-Resolution Dilated Wavelet Genomic Conv Tower"
+      operator:
+        type: "wt_conv"
+        in_channels: 768
+        out_channels: 1536
+        wavelet_levels: 4
+      precision: "bf16"
+      metadata: {}
+    - id: "enhancer_promoter_attn"
+      name: "Long-Range Enhancer-Promoter Chromatin Attention"
+      operator:
+        type: "gqa"
+        num_q_heads: 12
+        num_kv_heads: 4
+        d_k: 128
+      precision: "bf16"
+      metadata: {}
+    - id: "regulatory_ffn"
+      name: "Genomic Regulatory GeGLU Feed-Forward"
+      operator:
+        type: "geglu"
+        in_features: 1536
+        hidden_features: 4096
+      precision: "bf16"
+      metadata: {}
+    - id: "multi_assay_track_head"
+      name: "5,313-Track Human Epigenome & Variant Effect Readout"
+      operator:
+        type: "linear"
+        in_features: 1536
+        out_features: 5313
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0005
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "uncertainty_kendall_gal"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

@@ -1,0 +1,39 @@
+//! Modular UI components, canvas viewports, inspector sidebars, and execution docks.
+
+pub mod about;
+pub mod advisor_dock;
+pub mod canvas_node;
+pub mod canvas_tree;
+pub mod canvas_yaml;
+pub mod code_viewer;
+pub mod design_wizard;
+pub mod gallery;
+pub mod inspector;
+pub mod modals;
+pub mod model_surgery;
+pub mod navbar;
+pub mod palette;
+pub mod roofline_dock;
+pub mod studio_runner;
+pub mod telemetry_viewer;
+pub mod training_planner;
+pub mod workspace_manager;
+
+pub use about::*;
+pub use advisor_dock::*;
+pub use canvas_node::*;
+pub use canvas_tree::*;
+pub use canvas_yaml::*;
+pub use code_viewer::*;
+pub use design_wizard::*;
+pub use gallery::*;
+pub use inspector::*;
+pub use modals::*;
+pub use model_surgery::*;
+pub use navbar::*;
+pub use palette::*;
+pub use roofline_dock::*;
+pub use studio_runner::*;
+pub use telemetry_viewer::*;
+pub use training_planner::*;
+pub use workspace_manager::*;

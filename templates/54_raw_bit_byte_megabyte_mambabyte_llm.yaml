@@ -1,0 +1,177 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "raw_bit_byte_megabyte_mambabyte_llm"
+  display_name: "54. Raw Bit & Byte Multi-Scale Foundation LLM (MegaByte / MambaByte / bGPT)"
+  domain: "LanguageAndFoundationModels"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DatacenterGPU_H100"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1979.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "megabyte"
+    - "mambabyte"
+    - "bgpt"
+    - "raw_bits_and_bytes"
+    - "bit_plane_decomposition"
+    - "tokenizer_free"
+inputs:
+  - id: "raw_binary_byte_stream"
+    name: "Raw Binary Bit/Byte Stream (0..255 Octets / 8-Bit Planes)"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 256
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "next_byte_octet_logits"
+    name: "Autoregressive Next-Byte / Bit-Plane Logits (256 Octets)"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 256
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 256
+    constraint:
+      kind: "direct_linear"
+    loss: "cross_entropy"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "raw_byte_embed"
+      name: "Raw Byte Octet Embedding (256 -> 256)"
+      operator:
+        type: "embedding"
+        num_embeddings: 256
+        embedding_dim: 256
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "entropy_patch_conformer"
+      name: "Dynamic Shannon-Entropy Byte Patcher (256 -> 768)"
+      operator:
+        type: "entropy_byte_patcher"
+        d_byte: 256
+        d_latent: 768
+        entropy_threshold: 1.75
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "mambabyte_ssm_backbone"
+      name: "MambaByte O(T) Selective State-Space Byte Sequence Backbone"
+      operator:
+        type: "mamba2_ssd"
+        d_model: 768
+        d_state: 64
+        d_conv: 4
+        expand: 2
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "megabyte_global_local_hierarchy"
+      name: "MegaByte / bGPT Multi-Scale Patch-to-Byte & 8-Bit-Plane Decoder"
+      operator:
+        type: "raw_bit_byte_multiscale"
+        d_global: 768
+        d_local: 512
+        patch_bytes: 8
+        bit_plane_decomposition: true
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "local_byte_swiglu"
+      name: "Local Intra-Patch Byte Refinement SwiGLU FFN"
+      operator:
+        type: "swiglu"
+        in_features: 512
+        hidden_features: 1536
+      precision: "bf16"
+      modular_role: "standard_backbone"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "raw_byte_readout"
+      name: "Autoregressive Byte & Bit-Plane Readout Head (512 -> 256)"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 256
+        bias: false
+      precision: "fp32"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+  connections: []
+training:
+  optimizer_family: "muon_adam_w_partitioned"
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0004
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.04
+    stable_ratio: 0.76
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+  stages:
+    - stage_id: "stage_1_raw_bit_byte"
+      stage_name: "Stage 1: Raw UTF-8 & Binary Bit/Byte Pretraining (MegaByte/bGPT)"
+      paradigm: "pretraining"
+      token_budget: 2000000000000
+      sequence_length: 65536
+      lr_multiplier: 1.0
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_2_byte_context_ext"
+      stage_name: "Stage 2: Dynamic Entropy Byte-Patch Context Extension (256K Bytes)"
+      paradigm: "context_extension"
+      token_budget: 250000000000
+      sequence_length: 262144
+      lr_multiplier: 0.25
+      freeze_policy: "full_trainable"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

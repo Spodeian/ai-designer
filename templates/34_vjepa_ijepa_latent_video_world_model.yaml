@@ -1,0 +1,144 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "vjepa_ijepa_latent_video_world_model"
+  display_name: "V-JEPA / I-JEPA (JEV) Joint-Embedding Spatiotemporal World Model"
+  domain: "VisionAndVideo"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "vjepa"
+    - "ijepa"
+    - "jev"
+    - "world_model"
+    - "joint_embedding"
+    - "self_supervised"
+inputs:
+  - id: "masked_video_tubes"
+    name: "Spatiotemporal Video Tubelets with Multi-Block Masking"
+    space:
+      kind: "video_3d"
+      frames: 16
+      resolution:
+        - 224
+        - 224
+      channels: 3
+    symbolic_shape:
+      - "B"
+      - 3
+      - 16
+      - 224
+      - 224
+    normalizer:
+      kind: "imagenet_normalize"
+    coordinate_encoding:
+      kind: "rope_3d"
+      base: 10000.0
+    patching:
+      patch_size:
+        - 16
+        - 16
+      flatten_channels: true
+outputs:
+  - id: "predicted_target_latents"
+    name: "Predicted Target Spatiotemporal Latent Representations"
+    space:
+      kind: "continuous_vector"
+      dimension: 1024
+      range: null
+    symbolic_shape:
+      - "B"
+      - 3136
+      - 1024
+    constraint:
+      kind: "direct_linear"
+    loss: "vicreg"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "tubelet_patch_embed"
+      name: "3D Tubelet Patch Linear Projection"
+      operator:
+        type: "linear"
+        in_features: 768
+        out_features: 1024
+        bias: true
+      precision: "bf16"
+      metadata: {}
+    - id: "context_encoder_attn"
+      name: "Visible-Context ViT Attention Encoder (x_context)"
+      operator:
+        type: "gqa"
+        num_q_heads: 16
+        num_kv_heads: 16
+        d_k: 64
+      precision: "bf16"
+      metadata: {}
+    - id: "context_encoder_mlp"
+      name: "Context Encoder SwiGLU FFN"
+      operator:
+        type: "swiglu"
+        in_features: 1024
+        hidden_features: 2816
+      precision: "bf16"
+      metadata: {}
+    - id: "jepa_latent_predictor"
+      name: "JEPA Narrow Predictor & EMA Target Alignment"
+      operator:
+        type: "jepa_predictor"
+        d_model: 1024
+        predictor_dim: 384
+        num_heads: 12
+        ema_momentum: 0.996
+      precision: "bf16"
+      metadata: {}
+    - id: "latent_predictor_norm"
+      name: "Target Representation LayerNorm"
+      operator:
+        type: "layer_norm"
+        dim: 1024
+        eps: 0.000001
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.04
+  adamw:
+    lr: 0.001
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.04
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.08
+    stable_ratio: 0.72
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.996
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

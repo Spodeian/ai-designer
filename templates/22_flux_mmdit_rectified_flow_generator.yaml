@@ -1,0 +1,154 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "flux_mmdit_rectified_flow_generator"
+  display_name: "Flux.1 / SD3 Multimodal Diffusion Transformer (MMDiT) Image Generator"
+  domain: "GenerativeImageAndVision"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags: ["industry", "image-generator", "flux", "sd3", "mmdit", "adaln-zero", "rectified-flow", "ot-cfm", "rope-2d"]
+
+inputs:
+  - id: "latent_image_patches"
+    name: "16-Channel VAE Latent Patch Tokens (2x2 Patchified)"
+    space:
+      kind: "image_rgb"
+      resolution: [1024, 1024]
+      channels: 16
+    symbolic_shape: ["B", 4096, 64]
+    coordinate_encoding:
+      kind: "rope_2d_dynamic"
+      base: 10000.0
+    patching:
+      patch_size: [2, 2]
+      flatten_channels: true
+  - id: "t5_clip_prompt_embeds"
+    name: "Joint T5-XXL & CLIP Text Conditioning Tokens"
+    space:
+      kind: "continuous_vector"
+      dimension: 4096
+    symbolic_shape: ["B", 512, 4096]
+  - id: "flow_timestep"
+    name: "Rectified Flow Timestep & Guidance Scale"
+    space:
+      kind: "continuous_vector"
+      dimension: 1
+      range: [0.0, 1.0]
+    symbolic_shape: ["B", 1]
+
+outputs:
+  - id: "rectified_velocity_field"
+    name: "Predicted Straight-Path Flow Velocity v_theta(z_t, t, c)"
+    space:
+      kind: "continuous_vector"
+      dimension: 64
+    symbolic_shape: ["B", 4096, 64]
+    loss: "ot_cfm"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.0
+  nodes:
+    - id: "patch_stem_proj"
+      name: "Latent Patch Linear Embedding Stem"
+      operator:
+        type: "linear"
+        in_features: 64
+        out_features: 1536
+        bias: true
+      precision: "bf16"
+    - id: "mmdit_qk_rms_norm"
+      name: "Per-Head QK-Norm (High-Resolution Entropy Guard)"
+      operator:
+        type: "qk_norm"
+        d_head: 64
+      precision: "fp32"
+    - id: "mmdit_dual_stream_1"
+      name: "Dual-Stream MMDiT Joint Text-Image Block 1"
+      operator:
+        type: "ada_ln_zero_dit"
+        d_model: 1536
+        num_heads: 24
+        cond_dim: 1536
+        dual_stream_mmdit: true
+      precision: "bf16"
+    - id: "mmdit_dual_stream_2"
+      name: "Dual-Stream MMDiT Joint Text-Image Block 2"
+      operator:
+        type: "ada_ln_zero_dit"
+        d_model: 1536
+        num_heads: 24
+        cond_dim: 1536
+        dual_stream_mmdit: true
+      precision: "bf16"
+    - id: "flux_single_stream_block"
+      name: "Single-Stream Parallel DiT Modulation Block"
+      operator:
+        type: "ada_ln_zero_dit"
+        d_model: 1536
+        num_heads: 24
+        cond_dim: 1536
+        dual_stream_mmdit: false
+      precision: "fp8_e4m3"
+    - id: "flux_mlp_swiglu"
+      name: "Channel-Mixing SwiGLU Feedforward"
+      operator:
+        type: "swiglu"
+        in_features: 1536
+        hidden_features: 4096
+      precision: "fp8_e4m3"
+    - id: "final_adaln_norm"
+      name: "Final Modulated LayerNorm"
+      operator:
+        type: "layer_norm"
+        dim: 1536
+        eps: 0.000001
+      precision: "fp32"
+    - id: "velocity_unpatchify_head"
+      name: "Unpatchify Rectified Velocity Readout Head"
+      operator:
+        type: "linear"
+        in_features: 1536
+        out_features: 64
+        bias: true
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0001
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.80
+    decay_ratio: 0.15
+    min_lr_ratio: 0.05
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.9999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

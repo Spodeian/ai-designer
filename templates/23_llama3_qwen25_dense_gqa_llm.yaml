@@ -1,0 +1,154 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "llama3_qwen25_dense_gqa_llm"
+  display_name: "Llama-3.3 / Qwen-2.5 Dense GQA (8:1 KV) + SwiGLU 128K-Context LLM"
+  domain: "FrontierIndustryLLM"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags: ["industry", "llm", "llama-3", "qwen-2.5", "gqa", "swiglu", "rope-500k", "dense-transformer"]
+
+inputs:
+  - id: "input_ids"
+    name: "128K Long-Context Token Sequence (High-Theta RoPE)"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 128256
+      is_causal: true
+    symbolic_shape: ["B", "T"]
+    coordinate_encoding:
+      kind: "rope_1d"
+      base: 500000.0
+
+outputs:
+  - id: "vocab_logits"
+    name: "Autoregressive Next-Token Logits"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 128256
+      is_causal: true
+    symbolic_shape: ["B", "T", 128256]
+    loss: "cross_entropy"
+
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.0
+  nodes:
+    - id: "tok_embeddings"
+      name: "Tiktoken / BPE Vocabulary Embedding (128,256)"
+      operator:
+        type: "embedding"
+        num_embeddings: 128256
+        embedding_dim: 2048
+      precision: "bf16"
+    - id: "blk1_attn_norm"
+      name: "Stage 1 Pre-Attention RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.00001
+      precision: "fp32"
+    - id: "blk1_gqa"
+      name: "Stage 1 Grouped-Query Attention (32 Q / 4 KV Heads)"
+      operator:
+        type: "gqa"
+        num_q_heads: 32
+        num_kv_heads: 4
+        d_k: 64
+      precision: "bf16"
+    - id: "blk1_ffn_norm"
+      name: "Stage 1 Pre-FFN RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.00001
+      precision: "fp32"
+    - id: "blk1_swiglu"
+      name: "Stage 1 SwiGLU Gated Feedforward (4x Expansion)"
+      operator:
+        type: "swiglu"
+        in_features: 2048
+        hidden_features: 8192
+      precision: "bf16"
+    - id: "blk2_attn_norm"
+      name: "Stage 2 Pre-Attention RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.00001
+      precision: "fp32"
+    - id: "blk2_gqa"
+      name: "Stage 2 Grouped-Query Attention (32 Q / 4 KV Heads)"
+      operator:
+        type: "gqa"
+        num_q_heads: 32
+        num_kv_heads: 4
+        d_k: 64
+      precision: "bf16"
+    - id: "blk2_ffn_norm"
+      name: "Stage 2 Pre-FFN RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.00001
+      precision: "fp32"
+    - id: "blk2_swiglu"
+      name: "Stage 2 SwiGLU Gated Feedforward (4x Expansion)"
+      operator:
+        type: "swiglu"
+        in_features: 2048
+        hidden_features: 8192
+      precision: "bf16"
+    - id: "final_norm"
+      name: "Terminal Pre-Readout RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 2048
+        eps: 0.00001
+      precision: "fp32"
+    - id: "lm_head"
+      name: "Untied Vocabulary Projection Head"
+      operator:
+        type: "linear"
+        in_features: 2048
+        out_features: 128256
+        bias: false
+      precision: "fp32"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas: [0.9, 0.95]
+    eps: 0.00000001
+    weight_decay: 0.1
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.03
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

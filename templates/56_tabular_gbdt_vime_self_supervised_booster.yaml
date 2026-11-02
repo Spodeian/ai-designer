@@ -1,0 +1,179 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "tabular_gbdt_vime_self_supervised_booster"
+  display_name: "56. Self-Supervised Gradient Boosted Decision Trees (VIME + Hastie Synthetic + CatBoost)"
+  domain: "TabularAndClassicalProbabilisticML"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "AppleSilicon_Unified64GB"
+    max_vram_bytes: 68719476736
+    peak_fp16_tflops: 35.0
+    peak_fp8_tflops: 35.0
+    memory_bandwidth_gbs: 400.0
+  tags:
+    - "gradient_boosting"
+    - "gbdt_self_supervised"
+    - "vime"
+    - "catboost_oblivious_trees"
+    - "hastie_synthetic_marginals"
+    - "tabular_ssl"
+inputs:
+  - id: "heterogeneous_tabular_features"
+    name: "Heterogeneous Continuous & High-Cardinality Categorical Tabular Features"
+    space:
+      kind: "tabular_features"
+      num_continuous: 24
+      num_categorical: 32
+      cardinalities:
+        - 16
+        - 64
+        - 128
+    symbolic_shape:
+      - "B"
+      - 128
+    normalizer:
+      kind: "ple"
+      num_bins: 4
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "calibrated_tabular_risk_logits"
+    name: "Calibrated Gradient-Boosted Leaf Log-Odds & Self-Supervised Mask Reconstruction"
+    space:
+      kind: "continuous_vector"
+      dimension: 2
+      range: null
+    symbolic_shape:
+      - "B"
+      - 2
+    constraint:
+      kind: "monotonic"
+      positive_weights: true
+    loss: "focal"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "tabular_revin_conformer"
+      name: "Tabular Feature Distribution & Quantile Scale Conformer"
+      operator:
+        type: "rev_in_layer"
+        channels: 128
+      precision: "fp32"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "hard_concrete_l0_selector"
+      name: "HardConcrete L0 Stochastic Feature Gate & Corruptor"
+      operator:
+        type: "hard_concrete_l0"
+        dim: 128
+      precision: "fp32"
+      modular_role: "routing_gate"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "gbdt_vime_oblivious_ensemble"
+      name: "Oblivious Decision Tree Ensemble (128 Trees, Depth 6) + VIME Mask/Value Estimator"
+      operator:
+        type: "tabular_gbdt_vime_ssl"
+        num_trees: 128
+        tree_depth: 6
+        vime_corruption_rate: 0.3
+      precision: "fp32"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "entmax_sparse_split_gate"
+      name: "Entmax-1.5 Sparse Oblivious Split Threshold Gate"
+      operator:
+        type: "entmax15_gate"
+      precision: "fp32"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "leaf_cooccurrence_kan_refiner"
+      name: "Tree-Leaf Co-Occurrence Spline Calibrator (128 -> 64)"
+      operator:
+        type: "kan_layer"
+        in_features: 128
+        out_features: 64
+        grid_size: 5
+        spline_order: 3
+      precision: "fp32"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "optional_adapter"
+        adapter_tag: "kan_leaf_spline_calibrator"
+        enabled_by_default: true
+      metadata: {}
+    - id: "boosted_risk_readout"
+      name: "Monotonic Boosted Log-Odds & Auxiliary VIME Head (64 -> 2)"
+      operator:
+        type: "linear"
+        in_features: 64
+        out_features: 2
+        bias: true
+      precision: "fp32"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+  connections: []
+training:
+  optimizer_family: "adan_adaptive_nesterov"
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.001
+    betas:
+      - 0.9
+      - 0.999
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.05
+    warmup_steps: 500
+    total_steps: 20000
+    min_lr: 0.00001
+  hygiene:
+    auto_clip: true
+    clip_percentile: 95.0
+    max_norm: 1.0
+    ema_decay: 0.995
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "grad_norm"
+  stages:
+    - stage_id: "stage_1_vime_ssl"
+      stage_name: "Stage 1: Unlabeled VIME Mask Estimation & Hastie Marginal Discrimination"
+      paradigm: "tabular_self_supervised_vime"
+      token_budget: 500000000
+      sequence_length: 128
+      lr_multiplier: 1.0
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_2_oof_gbdt"
+      stage_name: "Stage 2: 5-Fold Out-of-Fold (OOF) GBDT Leaf Fine-Tuning & Calibration"
+      paradigm: "tabular_gradient_boosting_cv"
+      token_budget: 100000000
+      sequence_length: 128
+      lr_multiplier: 0.3
+      freeze_policy: "full_trainable"
+precision:
+  default_weight_precision: "fp32"
+  default_activation_precision: "fp32"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

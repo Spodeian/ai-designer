@@ -1,0 +1,124 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "decision_transformer_dpo_preference_aligner"
+  display_name: "Offline Decision Transformer & DPO Contrastive Preference Aligner"
+  domain: "ReinforcementLearningAndAlignment"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "decision_transformer"
+    - "dpo"
+    - "offline_rl"
+    - "preference_alignment"
+    - "return_to_go"
+inputs:
+  - id: "trajectory_triplets"
+    name: "Interleaved Return-to-Go, State & Action Sequence (R_t, s_t, a_t)"
+    space:
+      kind: "continuous_vector"
+      dimension: 768
+      range: null
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 768
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+    coordinate_encoding:
+      kind: "rope_1d"
+      base: 10000.0
+    patching: null
+outputs:
+  - id: "dpo_preference_logratios"
+    name: "Target Action & Reference-Anchored DPO Contrastive Log-Ratios"
+    space:
+      kind: "continuous_vector"
+      dimension: 64
+      range: null
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 64
+    constraint:
+      kind: "direct_linear"
+    loss: "dpo_contrastive_log_ratio"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "causal_trajectory_attn"
+      name: "Causal Trajectory Grouped-Query Attention"
+      operator:
+        type: "gqa"
+        num_q_heads: 12
+        num_kv_heads: 4
+        d_k: 64
+      precision: "bf16"
+      metadata: {}
+    - id: "trajectory_swiglu"
+      name: "Trajectory Conditioning SwiGLU MLP"
+      operator:
+        type: "swiglu"
+        in_features: 768
+        hidden_features: 2048
+      precision: "bf16"
+      metadata: {}
+    - id: "dpo_logit_softcap"
+      name: "Preference Log-Ratio Stability Soft-Cap"
+      operator:
+        type: "logit_soft_cap"
+        cap_val: 20.0
+      precision: "fp32"
+      metadata: {}
+    - id: "action_preference_head"
+      name: "Return-Conditioned Action & DPO Margin Readout"
+      operator:
+        type: "linear"
+        in_features: 768
+        out_features: 64
+        bias: false
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0001
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.1
+    stable_ratio: 0.7
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

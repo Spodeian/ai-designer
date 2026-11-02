@@ -1,0 +1,123 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "mattergen_equivariant_crystal_diffusion"
+  display_name: "MatterGen / CDVAE Periodic Crystal & Solid-State Material Generator"
+  domain: "MaterialsScienceAndChemistry"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "mattergen"
+    - "cdvae"
+    - "crystal_diffusion"
+    - "periodic_lattice"
+    - "materials_discovery"
+inputs:
+  - id: "unit_cell_crystal_graph"
+    name: "Periodic Unit Cell Fractional Coordinates & Lattice Vectors (SO(3)xZ^3)"
+    space:
+      kind: "graph_relational"
+      node_features: 256
+      edge_features: 128
+      heterophilic: true
+    symbolic_shape:
+      - "B"
+      - 64
+      - 256
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "periodic_crystal_lattice"
+    patching: null
+outputs:
+  - id: "denoised_crystal_lattice"
+    name: "Equivariant Fractional Coordinate Score & Stress Metric Tensor (9-D)"
+    space:
+      kind: "continuous_vector"
+      dimension: 9
+      range: null
+    symbolic_shape:
+      - "B"
+      - 64
+      - 9
+    constraint:
+      kind: "direct_linear"
+    loss: "score_matching_sde"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.05
+  nodes:
+    - id: "periodic_egnn_stage1"
+      name: "Periodic E(3)-Equivariant Crystal Graph Message Passing"
+      operator:
+        type: "egnn"
+        node_dim: 256
+        edge_dim: 128
+      precision: "bf16"
+      metadata: {}
+    - id: "clifford_lattice_basis"
+      name: "Clifford Cl(3,0) Bivector Unit-Cell Angle & Volume Interaction"
+      operator:
+        type: "clifford_geometric_product"
+        p: 3
+        q: 0
+      precision: "bf16"
+      metadata: {}
+    - id: "periodic_egnn_stage2"
+      name: "Multi-Image Periodic Boundary Equivariant Refinement"
+      operator:
+        type: "egnn"
+        node_dim: 256
+        edge_dim: 128
+      precision: "bf16"
+      metadata: {}
+    - id: "crystal_score_head"
+      name: "Fractional Coordinate Force & 3x3 Lattice Deformation Readout"
+      operator:
+        type: "linear"
+        in_features: 256
+        out_features: 9
+        bias: false
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.001
+  adamw:
+    lr: 0.0005
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.00000001
+    weight_decay: 0.001
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "uncertainty_kendall_gal"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

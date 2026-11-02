@@ -1,0 +1,160 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "openvla_pi0_vision_language_action_policy"
+  display_name: "OpenVLA / Pi0 Vision-Language-Action Flow Robotics Foundation Model"
+  domain: "RoboticsAndEmbodiedControl"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags:
+    - "openvla"
+    - "pi0"
+    - "vla"
+    - "vision_language_action"
+    - "flow_matching_robotics"
+inputs:
+  - id: "camera_observation"
+    name: "Multi-View Wrist & Third-Person RGB Images"
+    space:
+      kind: "image_rgb"
+      resolution:
+        - 224
+        - 224
+      channels: 3
+    symbolic_shape:
+      - "B"
+      - 3
+      - 224
+      - 224
+    normalizer:
+      kind: "imagenet_normalize"
+    coordinate_encoding:
+      kind: "rope_2d_dynamic"
+      base: 10000.0
+    patching:
+      patch_size:
+        - 14
+        - 14
+      flatten_channels: true
+  - id: "robot_proprioception"
+    name: "Bimanual Joint Angles & Gripper Widths (14-DoF)"
+    space:
+      kind: "continuous_vector"
+      dimension: 14
+      range:
+        - -3.14159
+        - 3.14159
+    symbolic_shape:
+      - "B"
+      - 14
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "continuous_action_chunk"
+    name: "50-Hz Continuous 7-DoF End-Effector Action Trajectory"
+    space:
+      kind: "rigid_body_trajectory"
+      horizon_steps: 50
+      dof_per_step: 7
+    symbolic_shape:
+      - "B"
+      - 50
+      - 7
+    constraint:
+      kind: "continuous_rotation_6d"
+    loss: "ot_cfm"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "siglip_patch_proj"
+      name: "SigLIP Vision Patch Projection"
+      operator:
+        type: "linear"
+        in_features: 588
+        out_features: 2048
+        bias: true
+      precision: "bf16"
+      metadata: {}
+    - id: "proprio_state_proj"
+      name: "Proprioceptive Joint State Token Projection"
+      operator:
+        type: "linear"
+        in_features: 14
+        out_features: 2048
+        bias: true
+      precision: "bf16"
+      metadata: {}
+    - id: "vlm_backbone_gqa"
+      name: "Pretrained VLM Backbone Grouped-Query Attention"
+      operator:
+        type: "gqa"
+        num_q_heads: 16
+        num_kv_heads: 4
+        d_k: 128
+      precision: "bf16"
+      metadata: {}
+    - id: "flow_action_expert"
+      name: "Pi0 Flow-Matching Action Expert (AdaLN-Zero DiT)"
+      operator:
+        type: "ada_ln_zero_dit"
+        d_model: 2048
+        num_heads: 16
+        cond_dim: 2048
+        dual_stream_mmdit: false
+      precision: "bf16"
+      metadata: {}
+    - id: "vla_action_readout"
+      name: "7-DoF Continuous Action Velocity Readout"
+      operator:
+        type: "linear"
+        in_features: 2048
+        out_features: 7
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

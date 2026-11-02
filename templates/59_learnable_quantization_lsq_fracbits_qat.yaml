@@ -1,0 +1,242 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "learnable_quantization_lsq_fracbits_qat"
+  display_name: "59. Learnable Quantization Level & Mixed-Bitwidth QAT (LSQ+ / FracBits / PACT)"
+  domain: "Quantisation"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "EdgeRobotics_JetsonOrin"
+    max_vram_bytes: 68719476736
+    peak_fp16_tflops: 275.0
+    peak_fp8_tflops: 550.0
+    memory_bandwidth_gbs: 204.0
+  tags:
+    - "learnable_quantization"
+    - "qat"
+    - "lsq_plus"
+    - "pact"
+    - "fracbits"
+    - "mixed_bitwidth"
+    - "bops_penalty"
+inputs:
+  - id: "quantized_sequence_tokens"
+    name: "Quantized Sequence Input Embeddings [B, 1024, 512]"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 32000
+    symbolic_shape:
+      - "B"
+      - 1024
+      - 512
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "rope_1d"
+      base: 10000.0
+outputs:
+  - id: "quantized_prediction_logits"
+    name: "Calibrated Mixed-Precision Output Prediction Logits [B, 1024, 32000]"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 32000
+    symbolic_shape:
+      - "B"
+      - 1024
+      - 32000
+    constraint:
+      kind: "direct_linear"
+    loss: "learnable_bitwidth_bops_penalty"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "embed_tokens"
+      name: "Token Embedding Table"
+      operator:
+        type: "embedding"
+        num_embeddings: 32000
+        embedding_dim: 512
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "attn_pre_quant"
+      name: "Attention Input Learnable Step-Size Quantizer (LSQ+)"
+      operator:
+        type: "learnable_quantizer_qat"
+        dim: 512
+        init_bits: 4.0
+        min_bits: 2.0
+        max_bits: 8.0
+        learn_step_size_and_clip: true
+      precision: "int4_sym"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "gqa_block"
+      name: "Grouped Query Attention (GQA)"
+      operator:
+        type: "gqa"
+        num_q_heads: 8
+        num_kv_heads: 2
+        d_k: 64
+      precision: "int4_sym"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "ffn_pre_quant"
+      name: "Differentiable FracBits Mixed-Bitwidth Quantizer"
+      operator:
+        type: "learnable_quantizer_qat"
+        dim: 512
+        init_bits: 3.5
+        min_bits: 1.58
+        max_bits: 8.0
+        learn_step_size_and_clip: true
+      precision: "bitnet158b"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "swiglu_mlp"
+      name: "SwiGLU Gated Feedforward Block"
+      operator:
+        type: "swiglu"
+        in_features: 512
+        hidden_features: 1376
+      precision: "int4_sym"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "rms_norm_out"
+      name: "Final RMSNorm Layer"
+      operator:
+        type: "rms_norm"
+        dim: 512
+        eps: 0.00001
+      precision: "fp32"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "lm_head"
+      name: "Vocabulary Logits LM Projection Head"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 32000
+        bias: false
+      precision: "bf16"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+  connections: []
+training:
+  optimizer_family: "adam_w_standard"
+  auto_partition_parameters: false
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    nesterov: true
+    ns_steps: 5
+  adamw:
+    lr: 0.0001
+    betas:
+      - 0.9
+      - 0.98
+    eps: 0.00000001
+    weight_decay: 0.01
+  lion:
+    lr: 0.00005
+    betas:
+      - 0.9
+      - 0.99
+    weight_decay: 0.01
+  sophia:
+    lr: 0.0001
+    betas:
+      - 0.965
+      - 0.99
+    rho: 0.04
+    weight_decay: 0.01
+  lbfgs:
+    max_iter: 20
+    history_size: 10
+    tolerance_grad: 0.0000001
+    tolerance_change: 0.000000001
+  quantization_training:
+    mode: "frac_bits_mixed_bitwidth"
+    target_avg_bits: 3.5
+    min_layer_bits: 1.58
+    max_layer_bits: 8.0
+    bops_penalty_lambda: 0.0005
+    learn_activation_clip_alpha: true
+    learn_non_uniform_grid: false
+    ste_temperature: 1.0
+  parallelism:
+    data_parallel_degree: 2
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    micro_batch_size: 4
+    gradient_accumulation_steps: 8
+    sequence_length: 1024
+    sharding: "zero2_grad_and_optim"
+  curriculum:
+    total_training_tokens: 5000000000
+    synthetic_data_ratio: 0.2
+    checkpoint_interval_steps: 250
+    eval_interval_steps: 50
+    sequence_packing: true
+    curriculum_length_ramp: false
+  scheduler:
+    kind: "cosine_with_warmup"
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.1
+    warmup_steps: 500
+    total_steps: 10000
+    min_lr: 0.00001
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "fixed_weights"
+  stages:
+    - stage_id: "stage_1_fp_warmup"
+      stage_name: "Stage 1: Full-Precision Backbone Stabilization Warmup"
+      paradigm: "supervised_fine_tuning"
+      token_budget: 1000000000
+      sequence_length: 1024
+      lr_multiplier: 1.0
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_2_learnable_step_size_clip"
+      stage_name: "Stage 2: LSQ+ Learnable Step-Size & PACT Activation Clip QAT"
+      paradigm: "learnable_quantization_bitwidth_qat"
+      token_budget: 2500000000
+      sequence_length: 1024
+      lr_multiplier: 0.5
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_3_fracbits_mixed_bitwidth_bops"
+      stage_name: "Stage 3: FracBits Differentiable Mixed-Bitwidth BOPs Penalty Annealing"
+      paradigm: "learnable_quantization_bitwidth_qat"
+      token_budget: 1500000000
+      sequence_length: 1024
+      lr_multiplier: 0.1
+      freeze_policy: "full_trainable"
+precision:
+  default_weight_precision: "int4_sym"
+  default_activation_precision: "int4_sym"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

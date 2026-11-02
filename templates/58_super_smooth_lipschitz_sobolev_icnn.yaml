@@ -1,0 +1,208 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "super_smooth_lipschitz_sobolev_icnn"
+  display_name: "58. Super-Smooth C^∞ 1-Lipschitz Björck-Cayley & Sobolev H² Network"
+  domain: "SmoothAndPhysicsInformedAI"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DatacenterGPU_H100"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1979.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "super_smooth"
+    - "lipschitz_bounded"
+    - "bjorck_orthonormalization"
+    - "sobolev_h2"
+    - "c_infinity"
+    - "input_convex"
+inputs:
+  - id: "state_manifold_input"
+    name: "Dynamical System State Coordinates [B, 512]"
+    space:
+      kind: "continuous_vector"
+      dimension: 512
+      range: null
+    symbolic_shape:
+      - "B"
+      - 512
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+    coordinate_encoding:
+      kind: "none"
+outputs:
+  - id: "certified_smooth_potential"
+    name: "Certified 1-Lipschitz C^∞ Sobolev Lyapunov Potential Function"
+    space:
+      kind: "continuous_vector"
+      dimension: 1
+      range: null
+    symbolic_shape:
+      - "B"
+      - 1
+    constraint:
+      kind: "lipschitz_bounded"
+      max_lipschitz_k: 1.0
+    loss: "sobolev_h2_curvature_penalty"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "lipschitz_proj_in"
+      name: "Björck-Cayley 1-Lipschitz Input Orthonormalizer"
+      operator:
+        type: "super_smooth_lipschitz_layer"
+        dim: 512
+        bjorck_iters: 5
+        sobolev_order: 2
+        spectral_bound_k: 1.0
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "smooth_act_softplus"
+      name: "Softplus-Beta C^∞ Super-Smooth Activation"
+      operator:
+        type: "activation"
+        kind: "softplus_beta"
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "lipschitz_mid_block"
+      name: "Super-Smooth Sobolev H² Deep Manifold Layer"
+      operator:
+        type: "super_smooth_lipschitz_layer"
+        dim: 512
+        bjorck_iters: 5
+        sobolev_order: 2
+        spectral_bound_k: 1.0
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "groupsort_preserving"
+      name: "GroupSort-2 Norm-Preserving 1-Lipschitz Activation"
+      operator:
+        type: "activation"
+        kind: "group_sort2"
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "wendland_rbf_kernel"
+      name: "Wendland C^4 Compactly Supported RBF Kernel"
+      operator:
+        type: "activation"
+        kind: "wendland_c4_r_b_f"
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "smooth_potential_head"
+      name: "Input-Convex 1-Lipschitz Output Projection"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 1
+        bias: false
+      precision: "fp32"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+  connections: []
+training:
+  optimizer_family: "l_b_f_g_s_quasi_newton"
+  auto_partition_parameters: false
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    nesterov: true
+    ns_steps: 5
+  adamw:
+    lr: 0.0005
+    betas:
+      - 0.9
+      - 0.999
+    eps: 0.00000001
+    weight_decay: 0.0001
+  lion:
+    lr: 0.0001
+    betas:
+      - 0.9
+      - 0.99
+    weight_decay: 0.01
+  sophia:
+    lr: 0.0003
+    betas:
+      - 0.965
+      - 0.99
+    rho: 0.04
+    weight_decay: 0.01
+  lbfgs:
+    max_iter: 20
+    history_size: 10
+    tolerance_grad: 0.0000001
+    tolerance_change: 0.000000001
+  parallelism:
+    data_parallel_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    micro_batch_size: 32
+    gradient_accumulation_steps: 1
+    sequence_length: 512
+    sharding: "fsdp2_per_param_zero3"
+  curriculum:
+    total_training_tokens: 1000000000
+    synthetic_data_ratio: 0.5
+    checkpoint_interval_steps: 500
+    eval_interval_steps: 100
+    sequence_packing: false
+    curriculum_length_ramp: false
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.8
+    decay_ratio: 0.15
+    min_lr_ratio: 0.001
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "ntk_balancing"
+  stages:
+    - stage_id: "stage_1_bjorck_cayley_pretrain"
+      stage_name: "Stage 1: Certified 1-Lipschitz Björck Orthonormalization Pretraining"
+      paradigm: "super_smooth_sobolev_lipschitz"
+      token_budget: 600000000
+      sequence_length: 512
+      lr_multiplier: 1.0
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_2_sobolev_h2_regularization"
+      stage_name: "Stage 2: Sobolev H^2 Hessian & Curvature Penalty Cooldown"
+      paradigm: "super_smooth_sobolev_lipschitz"
+      token_budget: 400000000
+      sequence_length: 512
+      lr_multiplier: 0.2
+      freeze_policy: "full_trainable"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

@@ -1,0 +1,133 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "spintronic_skyrmion_organoid_active_inference"
+  display_name: "52. Spintronic Skyrmion Reservoir & Biological Organoid Active Inference Network"
+  domain: "WetwareOrganoidAndSpintronicAI"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "EdgeRobotics_JetsonOrin"
+    max_vram_bytes: 68719476736
+    peak_fp16_tflops: 137.5
+    peak_fp8_tflops: 275.0
+    memory_bandwidth_gbs: 204.8
+  tags:
+    - "organoid_intelligence"
+    - "spintronic_skyrmion"
+    - "active_inference"
+    - "free_energy_principle"
+    - "hd_mea"
+inputs:
+  - id: "hd_mea_electrophysiology_stream"
+    name: "HD-MEA Multi-Electrode Spike & Local Field Potential Stream"
+    space:
+      kind: "continuous_vector"
+      dimension: 512
+      range:
+        - -5.0
+        - 5.0
+    symbolic_shape:
+      - "B"
+      - 128
+      - 512
+    normalizer:
+      kind: "rev_in"
+      eps: 0.00001
+      affine: true
+    coordinate_encoding:
+      kind: "none"
+    patching: null
+outputs:
+  - id: "closed_loop_electrode_stimulus"
+    name: "Safe Closed-Loop Electrophysiological Action Stimulus"
+    space:
+      kind: "continuous_vector"
+      dimension: 16
+      range: null
+    symbolic_shape:
+      - "B"
+      - 128
+      - 16
+    constraint:
+      kind: "cbf_qp"
+      safe_distance: 0.2
+      max_velocity: 1.5
+    loss: "smooth_l1"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "skyrmion_spin_reservoir"
+      name: "Magnetic Skyrmion Spin-Torque Nonlinear Reservoir"
+      operator:
+        type: "echo_state_network"
+        reservoir_size: 512
+        spectral_radius: 0.98
+      precision: "fp16"
+      metadata: {}
+    - id: "organoid_fep_core"
+      name: "Cortical Organoid HD-MEA Variational Free Energy Minimizer"
+      operator:
+        type: "bio_organoid_active_inference"
+        num_channels: 512
+        free_energy_iters: 6
+      precision: "fp16"
+      metadata: {}
+    - id: "spiking_lif_transducer"
+      name: "Electrophysiological Spiking LIF Surrogate Transducer"
+      operator:
+        type: "spiking_lif"
+        d_model: 512
+        tau_mem: 15.0
+        v_threshold: 0.85
+        surrogate_slope: 25.0
+      precision: "fp16"
+      metadata: {}
+    - id: "liquid_synaptic_adapter"
+      name: "Continuous-Time Liquid CfC Homeostatic Plasticity Layer"
+      operator:
+        type: "liquid_neural_cfc"
+        d_model: 512
+        backbone_units: 512
+      precision: "fp16"
+      metadata: {}
+    - id: "active_inference_action_head"
+      name: "Expected Free Energy (EFE) Sensorimotor Stimulus Readout"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 16
+        bias: true
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0002
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.00000001
+    weight_decay: 0.001
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"

@@ -1,0 +1,138 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "simplicial_hodge_laplacian_topological_net"
+  display_name: "47. Simplicial & Cellular Complex Hodge-Laplacian Topological Network (MPSN)"
+  domain: "TopologicalDeepLearning"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "simplicial_complex"
+    - "hodge_laplacian"
+    - "topological_deep_learning"
+    - "cellular_sheaf"
+    - "helmholtz_hodge"
+inputs:
+  - id: "simplicial_cochain_features"
+    name: "Simplicial Cochain Features (0/1/2-Simplices)"
+    space:
+      kind: "graph_relational"
+      node_features: 256
+      edge_features: 256
+      heterophilic: true
+    symbolic_shape:
+      - "B"
+      - 1024
+      - 256
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+    coordinate_encoding:
+      kind: "rwpe_graph"
+      walk_steps: 16
+    patching: null
+outputs:
+  - id: "solenoidal_cochain_field"
+    name: "Divergence-Free Solenoidal Edge/Face Field"
+    space:
+      kind: "continuous_vector"
+      dimension: 3
+      range: null
+    symbolic_shape:
+      - "B"
+      - 1024
+      - 3
+    constraint:
+      kind: "curl_free_vector_field"
+    loss: "sobolev_h1_physics_residual"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.01
+  nodes:
+    - id: "hodge_conv_block_1"
+      name: "Simplicial Hodge-Laplacian Message Passing Block 1"
+      operator:
+        type: "simplicial_hodge_conv"
+        d_node: 256
+        d_edge: 256
+        d_face: 256
+      precision: "bf16"
+      metadata: {}
+    - id: "sheaf_stalk_transport"
+      name: "Cellular Sheaf Orthogonal Stalk Restriction"
+      operator:
+        type: "cellular_sheaf_conv"
+        node_dim: 256
+        stalk_dim: 8
+      precision: "bf16"
+      metadata: {}
+    - id: "hodge_conv_block_2"
+      name: "Simplicial Hodge-Laplacian Message Passing Block 2"
+      operator:
+        type: "simplicial_hodge_conv"
+        d_node: 256
+        d_edge: 256
+        d_face: 256
+      precision: "bf16"
+      metadata: {}
+    - id: "post_hodge_norm"
+      name: "Cochain RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 256
+        eps: 0.00001
+      precision: "fp32"
+      metadata: {}
+    - id: "harmonic_mlp"
+      name: "Helmholtz-Hodge Curl/Harmonic SwiGLU FFN"
+      operator:
+        type: "swiglu"
+        in_features: 256
+        hidden_features: 688
+      precision: "bf16"
+      metadata: {}
+    - id: "betti_harmonic_head"
+      name: "Solenoidal & Harmonic Cochain Readout"
+      operator:
+        type: "linear"
+        in_features: 256
+        out_features: 3
+        bias: false
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0003
+    betas:
+      - 0.9
+      - 0.99
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"

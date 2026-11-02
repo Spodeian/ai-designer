@@ -1,0 +1,196 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "self_supervised_dinov2_mae_vicreg_vision"
+  display_name: "57. Unified Self-Supervised Vision Backbone (DINOv2 + MAE + VICReg + I-JEPA)"
+  domain: "ComputerVisionAnd3D"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DatacenterGPU_H100"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1979.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "self_supervised_learning"
+    - "dinov2"
+    - "masked_autoencoder_mae"
+    - "vicreg"
+    - "barlow_twins"
+    - "sinkhorn_knopp"
+inputs:
+  - id: "multi_crop_image_views"
+    name: "Multi-Crop Global & Local Augmented Image Views [B, 3, 224, 224]"
+    space:
+      kind: "image_rgb"
+      resolution:
+        - 224
+        - 224
+      channels: 3
+    symbolic_shape:
+      - "B"
+      - 196
+      - 768
+    normalizer:
+      kind: "imagenet_normalize"
+    coordinate_encoding:
+      kind: "rope_2d_dynamic"
+      base: 10000.0
+    patching:
+      patch_size:
+        - 16
+        - 16
+      flatten_channels: true
+outputs:
+  - id: "ssl_joint_invariant_embedding"
+    name: "Collapse-Free Self-Supervised Prototype & Latent Patch Representation"
+    space:
+      kind: "continuous_vector"
+      dimension: 768
+      range: null
+    symbolic_shape:
+      - "B"
+      - 196
+      - 768
+    constraint:
+      kind: "direct_linear"
+    loss: "vicreg"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.00001
+  nodes:
+    - id: "vit_patch_norm"
+      name: "Patch Token Pre-RMSNorm"
+      operator:
+        type: "rms_norm"
+        dim: 768
+        eps: 0.000001
+      precision: "bf16"
+      modular_role: "input_conformer"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "vit_mha_encoder"
+      name: "ViT-B/16 Student-Teacher Multi-Head Self-Attention (12 Heads)"
+      operator:
+        type: "mha"
+        num_heads: 12
+        d_k: 64
+        d_v: 64
+        dropout: 0.0
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "vit_swiglu_ffn"
+      name: "DINOv2 SwiGLU Feed-Forward Block (768 -> 2048 -> 768)"
+      operator:
+        type: "swiglu"
+        in_features: 768
+        hidden_features: 2048
+      precision: "bf16"
+      modular_role: "backbone_processor"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+    - id: "ijepa_latent_mask_predictor"
+      name: "I-JEPA / MAE Masked Patch Latent Predictor (EMA Momentum 0.996)"
+      operator:
+        type: "jepa_predictor"
+        d_model: 768
+        predictor_dim: 384
+        num_heads: 12
+        ema_momentum: 0.996
+      precision: "bf16"
+      modular_role: "auxiliary_probe"
+      execution_condition:
+        kind: "alternate_choice"
+        group_id: "ssl_objective_branch"
+        option_name: "I-JEPA / MAE Latent Mask Predictor"
+        is_active: true
+      metadata: {}
+    - id: "sinkhorn_prototype_assigner"
+      name: "DINOv2 Sinkhorn-Knopp Equipartition Prototype Centering Layer"
+      operator:
+        type: "soft_sort_permutahedron"
+        num_items: 196
+      precision: "bf16"
+      modular_role: "auxiliary_probe"
+      execution_condition:
+        kind: "alternate_choice"
+        group_id: "ssl_objective_branch"
+        option_name: "DINOv2 Sinkhorn-Knopp Prototype Head"
+        is_active: false
+      metadata: {}
+    - id: "vicreg_expander_head"
+      name: "VICReg / Barlow Twins Variance-Invariance-Covariance Projector (768 -> 768)"
+      operator:
+        type: "linear"
+        in_features: 768
+        out_features: 768
+        bias: false
+      precision: "fp32"
+      modular_role: "output_adapter"
+      execution_condition:
+        kind: "always_active"
+      metadata: {}
+  connections: []
+training:
+  optimizer_family: "muon_adam_w_partitioned"
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.04
+  adamw:
+    lr: 0.001
+    betas:
+      - 0.9
+      - 0.999
+    eps: 0.00000001
+    weight_decay: 0.04
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.1
+    stable_ratio: 0.6
+    decay_ratio: 0.3
+    min_lr_ratio: 0.001
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 3.0
+    ema_decay: 0.996
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "uncertainty_kendall_gal"
+  stages:
+    - stage_id: "stage_1_dinov2_ibot"
+      stage_name: "Stage 1: DINOv2 EMA Student-Teacher + iBOT Masked Patch Pretraining"
+      paradigm: "self_supervised_student_teacher"
+      token_budget: 120000000000
+      sequence_length: 256
+      lr_multiplier: 1.0
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_2_vicreg_koleo"
+      stage_name: "Stage 2: High-Resolution 518x518 VICReg Anti-Collapse & KoLeo Regularization"
+      paradigm: "self_supervised_anti_collapse"
+      token_budget: 20000000000
+      sequence_length: 1024
+      lr_multiplier: 0.2
+      freeze_policy: "full_trainable"
+    - stage_id: "stage_3_linear_probe"
+      stage_name: "Stage 3: Frozen-Backbone Linear Probe & Dense Task Readout"
+      paradigm: "supervised_fine_tuning"
+      token_budget: 5000000000
+      sequence_length: 1024
+      lr_multiplier: 0.05
+      freeze_policy: "freeze_backbone_train_heads"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

@@ -1,0 +1,133 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "omnimodal_native_speech_vision_llm"
+  display_name: "Omnimodal Native Speech-Vision-Text Duplex Model (Gemini Live / Moshi)"
+  domain: "MultimodalAndCrossModal"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "omnimodal"
+    - "gemini_live"
+    - "moshi"
+    - "gpt4o"
+    - "full_duplex_audio"
+    - "rvq_codec"
+inputs:
+  - id: "interleaved_omni_tokens"
+    name: "Interleaved Acoustic RVQ Codebooks, Vision Patches & Text Tokens"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 65536
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "rope_2d_dynamic"
+      base: 100000.0
+    patching: null
+outputs:
+  - id: "duplex_audio_text_logits"
+    name: "Simultaneous Text Monologue & 8-Codebook Acoustic RVQ Stream"
+    space:
+      kind: "discrete_tokens"
+      vocab_size: 65536
+      is_causal: true
+    symbolic_shape:
+      - "B"
+      - "T"
+      - 65536
+    constraint:
+      kind: "direct_linear"
+    loss: "cross_entropy"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: null
+  nodes:
+    - id: "omni_token_embed"
+      name: "Unified Multimodal Codebook & Text Embedding"
+      operator:
+        type: "embedding"
+        num_embeddings: 65536
+        embedding_dim: 2048
+      precision: "bf16"
+      metadata: {}
+    - id: "temporal_backbone_gqa"
+      name: "Temporal Multimodal Backbone GQA (12.5 Hz Frame Rate)"
+      operator:
+        type: "gqa"
+        num_q_heads: 16
+        num_kv_heads: 4
+        d_k: 128
+      precision: "bf16"
+      metadata: {}
+    - id: "temporal_backbone_ffn"
+      name: "Temporal Backbone SwiGLU MLP"
+      operator:
+        type: "swiglu"
+        in_features: 2048
+        hidden_features: 5632
+      precision: "bf16"
+      metadata: {}
+    - id: "depth_transformer_rvq"
+      name: "Depth-Transformer 8-Codebook Acoustic Multi-Token Predictor"
+      operator:
+        type: "multi_token_prediction"
+        d_model: 2048
+        vocab_size: 65536
+        num_predict_tokens: 8
+      precision: "bf16"
+      metadata: {}
+    - id: "omni_readout_head"
+      name: "Duplex Stream Readout Projection"
+      operator:
+        type: "linear"
+        in_features: 2048
+        out_features: 65536
+        bias: false
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.02
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0004
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "gradnorm"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

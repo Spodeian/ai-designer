@@ -1,0 +1,135 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "alphafold3_pairformer_atomic_diffusion"
+  display_name: "AlphaFold 3 Pairformer & All-Atom Coordinate Diffusion"
+  domain: "BiomolecularAndChemistry"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "DataCenter_H100_SXM5"
+    max_vram_bytes: 85899345920
+    peak_fp16_tflops: 989.0
+    peak_fp8_tflops: 1978.0
+    memory_bandwidth_gbs: 3350.0
+  tags:
+    - "alphafold3"
+    - "pairformer"
+    - "atomic_diffusion"
+    - "biomolecular_complex"
+    - "protein_rna_ligand"
+inputs:
+  - id: "biomolecular_tokens"
+    name: "Tokenized Polymer Residues, Nucleic Acids & Ligand Atoms"
+    space:
+      kind: "graph_relational"
+      node_features: 384
+      edge_features: 128
+      heterophilic: true
+    symbolic_shape:
+      - "B"
+      - 512
+      - 384
+    normalizer:
+      kind: "none"
+    coordinate_encoding:
+      kind: "rwpe_graph"
+      walk_steps: 16
+    patching: null
+outputs:
+  - id: "all_atom_coordinates"
+    name: "Denoised 3D All-Atom Cartesian Coordinates (x, y, z)"
+    space:
+      kind: "continuous_vector"
+      dimension: 3
+      range: null
+    symbolic_shape:
+      - "B"
+      - 512
+      - 3
+    constraint:
+      kind: "direct_linear"
+    loss: "fape"
+graph:
+  topology:
+    kind: "residual_stream"
+    norm_placement: "pre_ln"
+    layer_scale_init: 0.05
+  nodes:
+    - id: "msa_lightweight_embedder"
+      name: "Lightweight 4-Block MSA Triangle Embedder"
+      operator:
+        type: "evoformer_triangle"
+        d_pair: 128
+      precision: "bf16"
+      metadata: {}
+    - id: "pairformer_trunk_stage1"
+      name: "AlphaFold 3 Pairformer Trunk (Single + Pair Triangle Attention)"
+      operator:
+        type: "pairformer_block"
+        d_single: 384
+        d_pair: 128
+        num_heads: 16
+      precision: "bf16"
+      metadata: {}
+    - id: "pairformer_trunk_stage2"
+      name: "AlphaFold 3 Deep Pairformer Refinement Block"
+      operator:
+        type: "pairformer_block"
+        d_single: 384
+        d_pair: 128
+        num_heads: 16
+      precision: "bf16"
+      metadata: {}
+    - id: "atomic_diffusion_transformer"
+      name: "All-Atom Coordinate Diffusion Transformer (AdaLN-Zero)"
+      operator:
+        type: "ada_ln_zero_dit"
+        d_model: 384
+        num_heads: 16
+        cond_dim: 384
+        dual_stream_mmdit: false
+      precision: "bf16"
+      metadata: {}
+    - id: "atom_coord_readout"
+      name: "All-Atom 3D Coordinate Readout Head (Angstroms)"
+      operator:
+        type: "linear"
+        in_features: 384
+        out_features: 3
+        bias: false
+      precision: "fp32"
+      metadata: {}
+  connections: []
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.015
+    momentum: 0.95
+    newton_schulz_steps: 5
+    weight_decay: 0.01
+  adamw:
+    lr: 0.0005
+    betas:
+      - 0.9
+      - 0.95
+    eps: 0.00000001
+    weight_decay: 0.01
+  scheduler:
+    kind: "warmup_stable_decay"
+    warmup_ratio: 0.05
+    stable_ratio: 0.75
+    decay_ratio: 0.2
+    min_lr_ratio: 0.01
+  hygiene:
+    auto_clip: true
+    clip_percentile: 90.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: true
+  loss_balancing: "uncertainty_kendall_gal"
+precision:
+  default_weight_precision: "bf16"
+  default_activation_precision: "bf16"
+  reduction_precision: "fp32"
+  master_weight_precision: "fp32"

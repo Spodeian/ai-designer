@@ -1,0 +1,101 @@
+aid_version: "1.0.0"
+metadata:
+  model_id: "reservoir_esn_ngrc_chaotic_attractor"
+  display_name: "Echo State (ESN) & Next-Gen Reservoir (NG-RC) Chaotic Attractor Forecaster"
+  domain: "ReservoirComputingAndDynamicalSystems"
+  author: "AI Designer Studio"
+  license: "Apache-2.0"
+  target_hardware:
+    profile_name: "ConsumerGPU_RTX4090"
+    max_vram_bytes: 25769803776
+    peak_fp16_tflops: 330.0
+    peak_fp8_tflops: 660.0
+    memory_bandwidth_gbs: 1008.0
+  tags: ["rare-ml", "reservoir-computing", "echo-state-network", "esn", "ng-rc", "next-gen-reservoir", "chaos", "lorenz", "fp64"]
+
+inputs:
+  - id: "chaotic_trajectory"
+    name: "Chaotic Lorenz-63 / Kuramoto-Sivashinsky Phase-Space State Stream"
+    space:
+      kind: "time_series"
+      channels: 3
+      horizon: 512
+      stationary: true
+    symbolic_shape: ["B", 512, 3]
+    normalizer:
+      kind: "standardize"
+      mean_fill: 0.0
+
+outputs:
+  - id: "lyapunov_horizon_forecast"
+    name: "Multi-Lyapunov-Time Strange Attractor Trajectory Prediction"
+    space:
+      kind: "continuous_vector"
+      dimension: 3
+    symbolic_shape: ["B", 512, 3]
+    loss: "mse"
+
+graph:
+  topology:
+    kind: "serial_stack"
+  nodes:
+    - id: "input_reservoir_lift"
+      name: "Fixed Sparse Random Input-to-Reservoir Injection (W_in)"
+      operator:
+        type: "linear"
+        in_features: 3
+        out_features: 512
+        bias: false
+      precision: "fp64"
+    - id: "esn_dynamical_reservoir"
+      name: "Echo State Dynamical Reservoir (Edge of Chaos rho = 0.98)"
+      operator:
+        type: "echo_state_network"
+        reservoir_size: 512
+        spectral_radius: 0.98
+      precision: "fp64"
+    - id: "ngrc_polynomial_delay"
+      name: "Next-Gen Reservoir (Time-Delay k=4 & Cubic Monomial Feature Bank)"
+      operator:
+        type: "next_gen_reservoir"
+        delay_taps: 4
+        poly_degree: 3
+      precision: "fp64"
+    - id: "ridge_regression_readout"
+      name: "Closed-Form Tikhonov / Ridge Regression Linear Readout (W_out)"
+      operator:
+        type: "linear"
+        in_features: 512
+        out_features: 3
+        bias: true
+      precision: "fp64"
+
+training:
+  auto_partition_parameters: true
+  muon:
+    lr: 0.01
+    momentum: 0.9
+    newton_schulz_steps: 5
+    weight_decay: 0.0
+  adamw:
+    lr: 0.0005
+    betas: [0.9, 0.99]
+    eps: 0.00000001
+    weight_decay: 0.0001
+  scheduler:
+    kind: "constant"
+    lr: 0.0005
+  hygiene:
+    auto_clip: true
+    clip_percentile: 95.0
+    max_norm: 1.0
+    ema_decay: 0.999
+    grokfast: false
+    activation_checkpointing: false
+  loss_balancing: "fixed_weights"
+
+precision:
+  default_weight_precision: "fp64"
+  default_activation_precision: "fp64"
+  reduction_precision: "fp64"
+  master_weight_precision: "fp64"
