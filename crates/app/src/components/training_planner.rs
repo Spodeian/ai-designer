@@ -218,19 +218,23 @@ impl TrainingPlannerView {
                         });
 
                     ui.separator();
-                    ui.label("Cluster GPUs:");
+                    ui.label("Cluster GPUs:")
+                        .on_hover_text("Total accelerator count in the compute cluster for parallel scaling calculations");
                     ui.add(
                         egui::DragValue::new(&mut self.preset_num_gpus)
                             .range(1..=4096)
                             .speed(1),
-                    );
+                    )
+                    .on_hover_text("Total number of GPUs / accelerators in the training cluster");
 
-                    ui.label("Base Seq Len:");
+                    ui.label("Base Seq Len:")
+                        .on_hover_text("Target context sequence length per training sample");
                     ui.add(
                         egui::DragValue::new(&mut self.preset_seq_len)
                             .range(64..=131072)
                             .speed(128),
-                    );
+                    )
+                    .on_hover_text("Sequence length in tokens for context window sizing and activation memory modeling");
 
                     if ui
                         .button(
@@ -288,6 +292,7 @@ impl TrainingPlannerView {
                                 RichText::new(format!("{} Add Training Stage", bi::PLUS_LG))
                                     .color(Color32::from_rgb(115, 225, 150)),
                             )
+                            .on_hover_text("Append a new curriculum stage (e.g. Pretraining, SFT, DPO/GRPO, QAT) to the pipeline")
                             .clicked()
                         {
                             let next_idx = state.spec.training.stages.len() + 1;
@@ -462,13 +467,15 @@ impl TrainingPlannerView {
                                     .on_hover_text(stage.paradigm.description());
 
                                 ui.separator();
-                                ui.label("Token Budget:");
+                                ui.label("Token Budget:")
+                                    .on_hover_text("Total training tokens allocated to this curriculum stage (e.g. 2B tokens for pretraining)");
                                 if ui
                                     .add(
                                         egui::DragValue::new(&mut stage.token_budget)
                                             .range(1_000_000..=100_000_000_000_000u64)
                                             .speed(100_000_000.0),
                                     )
+                                    .on_hover_text("Total training tokens consumed in this curriculum stage")
                                     .changed()
                                 {
                                     changed = true;
@@ -483,33 +490,38 @@ impl TrainingPlannerView {
                                 );
 
                                 ui.separator();
-                                ui.label("Seq Len:");
+                                ui.label("Seq Len:")
+                                    .on_hover_text("Context sequence length per sample during this curriculum stage");
                                 if ui
                                     .add(
                                         egui::DragValue::new(&mut stage.sequence_length)
                                             .range(64..=1_048_576)
                                             .speed(128),
                                     )
+                                    .on_hover_text("Sequence length in tokens for this training stage")
                                     .changed()
                                 {
                                     changed = true;
                                 }
 
                                 ui.separator();
-                                ui.label("LR Scale:");
+                                ui.label("LR Scale:")
+                                    .on_hover_text("Learning rate multiplier relative to the base optimizer learning rate (e.g. 1.0 for pretrain, 0.1 for SFT)");
                                 if ui
                                     .add(
                                         egui::DragValue::new(&mut stage.lr_multiplier)
                                             .range(0.001..=5.0)
                                             .speed(0.01),
                                     )
+                                    .on_hover_text("Learning rate scaling factor for this stage")
                                     .changed()
                                 {
                                     changed = true;
                                 }
 
                                 ui.separator();
-                                ui.label("Freeze / PEFT:");
+                                ui.label("Freeze / PEFT:")
+                                    .on_hover_text("Parameter freezing policy or Parameter-Efficient Fine-Tuning (LoRA / BitFit) applied during this stage");
                                 egui::ComboBox::from_id_salt(format!("stage_freeze_{idx}"))
                                     .selected_text(stage.freeze_policy.label())
                                     .width(210.0)
@@ -521,6 +533,12 @@ impl TrainingPlannerView {
                                                     fp,
                                                     fp.label(),
                                                 )
+                                                .on_hover_text(match fp {
+                                                    ParameterFreezePolicy::FullTrainable => "All model parameters updated during training (standard for pretraining)",
+                                                    ParameterFreezePolicy::FreezeBackboneTrainHeads => "Backbone weights locked; only task egress heads and routers are updated",
+                                                    ParameterFreezePolicy::LoraDoraAdapters => "Inject and train low-rank LoRA/DoRA adapter matrices while base weights remain frozen",
+                                                    ParameterFreezePolicy::FreezeEmbeddingsAndEncoders => "Keep token lookup table and input encoders frozen to preserve base vocabulary representations",
+                                                })
                                                 .changed()
                                             {
                                                 changed = true;
@@ -665,24 +683,28 @@ impl TrainingPlannerView {
                                 egui::Slider::new(warmup_ratio, 0.01..=0.25)
                                     .text("Warmup Fraction"),
                             )
+                            .on_hover_text("Fraction of training steps dedicated to ramping up learning rate from 0")
                             .changed();
                         changed |= ui
                             .add(
                                 egui::Slider::new(stable_ratio, 0.20..=0.90)
                                     .text("Stable Plateau Fraction"),
                             )
+                            .on_hover_text("Fraction of training steps held at peak learning rate (WSD allows branching checkouts at any point during stable plateau)")
                             .changed();
                         changed |= ui
                             .add(
                                 egui::Slider::new(decay_ratio, 0.05..=0.50)
                                     .text("Cooldown Decay Fraction"),
                             )
+                            .on_hover_text("Fraction of training steps annealing learning rate down to minimum floor")
                             .changed();
                         changed |= ui
                             .add(
                                 egui::Slider::new(min_lr_ratio, 0.0..=0.20)
                                     .text("Min LR Floor Ratio"),
                             )
+                            .on_hover_text("Minimum learning rate floor at end of decay relative to peak LR (typically 1-10%)")
                             .changed();
                     }
                     SchedulerSpec::CosineWithWarmup {
@@ -695,12 +717,14 @@ impl TrainingPlannerView {
                                 egui::Slider::new(warmup_ratio, 0.01..=0.25)
                                     .text("Warmup Fraction"),
                             )
+                            .on_hover_text("Fraction of training steps dedicated to ramping up learning rate from 0")
                             .changed();
                         changed |= ui
                             .add(
                                 egui::Slider::new(min_lr_ratio, 0.0..=0.25)
                                     .text("Cosine Floor Ratio"),
                             )
+                            .on_hover_text("Minimum learning rate floor at end of cosine cycle relative to peak LR")
                             .changed();
                     }
                     SchedulerSpec::Constant { lr } => {
@@ -756,17 +780,20 @@ impl TrainingPlannerView {
                                         format_large_count(state.partition_report.muon_param_count as u64)
                                     ))
                                     .color(Color32::from_rgb(110, 200, 255)),
-                                );
+                                )
+                                .on_hover_text("Learning rate for internal 2D weight matrices updated via Newton-Schulz orthogonalization (typically 0.02 - 0.05)");
                                 changed |= ui
                                     .add(
                                         egui::DragValue::new(&mut state.spec.training.muon.lr)
                                             .speed(0.0005)
                                             .range(1e-5..=0.2),
                                     )
+                                    .on_hover_text("Muon matrix learning rate")
                                     .changed();
                                 ui.end_row();
 
-                                ui.label("Muon Momentum & NS Steps:");
+                                ui.label("Muon Momentum & NS Steps:")
+                                    .on_hover_text("Nesterov momentum coefficient (0.95) and iterative Newton-Schulz quintic polynomial orthogonalization steps (5-6)");
                                 ui.horizontal(|ui| {
                                     changed |= ui
                                         .add(
@@ -774,8 +801,10 @@ impl TrainingPlannerView {
                                                 .speed(0.005)
                                                 .range(0.5..=0.999),
                                         )
+                                        .on_hover_text("Muon Nesterov momentum coefficient")
                                         .changed();
-                                    ui.label("Steps:");
+                                    ui.label("Steps:")
+                                        .on_hover_text("Newton-Schulz iteration steps per matrix update");
                                     changed |= ui
                                         .add(
                                             egui::DragValue::new(
@@ -783,6 +812,7 @@ impl TrainingPlannerView {
                                             )
                                             .range(3..=10),
                                         )
+                                        .on_hover_text("Newton-Schulz quintic iterations (typically 5 or 6)")
                                         .changed();
                                 });
                                 ui.end_row();
@@ -793,23 +823,27 @@ impl TrainingPlannerView {
                                         format_large_count(state.partition_report.adamw_param_count as u64)
                                     ))
                                     .color(Color32::from_rgb(130, 230, 165)),
-                                );
+                                )
+                                .on_hover_text("Learning rate for 1D vectors, biases, RMSNorm scales, and token embedding lookup tables (typically 3e-4 to 1e-3)");
                                 changed |= ui
                                     .add(
                                         egui::DragValue::new(&mut state.spec.training.adamw.lr)
                                             .speed(0.00005)
                                             .range(1e-6..=0.05),
                                     )
+                                    .on_hover_text("AdamW learning rate for 1D parameters and embeddings")
                                     .changed();
                                 ui.end_row();
 
-                                ui.label("AdamW Weight Decay:");
+                                ui.label("AdamW Weight Decay:")
+                                    .on_hover_text("Decoupled weight decay regularization parameter λ (typically 0.01 - 0.1)");
                                 changed |= ui
                                     .add(
                                         egui::DragValue::new(&mut state.spec.training.adamw.weight_decay)
                                             .speed(0.001)
                                             .range(0.0..=0.5),
                                     )
+                                    .on_hover_text("L2 weight decay penalty coefficient")
                                     .changed();
                                 ui.end_row();
                             });
@@ -1061,54 +1095,70 @@ impl TrainingPlannerView {
                     .num_columns(4)
                     .spacing([12.0, 6.0])
                     .show(ui, |ui| {
-                        ui.label("Data Parallel (DP):");
+                        ui.label("Data Parallel (DP):")
+                            .on_hover_text("Number of data-parallel replica ranks across the cluster (e.g. FSDP2 sharded data parallelism)");
                         changed |= ui
                             .add(
                                 egui::DragValue::new(&mut p.data_parallel_degree).range(1..=2048),
                             )
+                            .on_hover_text("Data parallel world size")
                             .changed();
-                        ui.label("Tensor Parallel (TP):");
+                        ui.label("Tensor Parallel (TP):")
+                            .on_hover_text("Megatron-LM style tensor parallel rank sharding linear projections across intra-node NVLink");
                         changed |= ui
                             .add(egui::DragValue::new(&mut p.tensor_parallel_degree).range(1..=64))
+                            .on_hover_text("Tensor parallel rank")
                             .changed();
                         ui.end_row();
 
-                        ui.label("Pipeline Parallel (PP):");
+                        ui.label("Pipeline Parallel (PP):")
+                            .on_hover_text("Pipeline parallel rank partitioning layers sequentially across pipeline stages");
                         changed |= ui
                             .add(
                                 egui::DragValue::new(&mut p.pipeline_parallel_degree).range(1..=64),
                             )
+                            .on_hover_text("Pipeline parallel stages")
                             .changed();
-                        ui.label("Context/Ring (CP):");
+                        ui.label("Context/Ring (CP):")
+                            .on_hover_text("Ring-Attention or DeepSpeed Ulysses context parallelism sharding long sequence lengths across GPUs");
                         changed |= ui
                             .add(egui::DragValue::new(&mut p.context_parallel_degree).range(1..=64))
+                            .on_hover_text("Context parallel world size")
                             .changed();
                         ui.end_row();
 
-                        ui.label("Expert Parallel (EP):");
+                        ui.label("Expert Parallel (EP):")
+                            .on_hover_text("Expert parallel rank distributing Mixture-of-Experts (MoE) routed layers across nodes");
                         changed |= ui
                             .add(egui::DragValue::new(&mut p.expert_parallel_degree).range(1..=256))
+                            .on_hover_text("Expert parallel rank")
                             .changed();
-                        ui.label("Micro-Batch (B_micro):");
+                        ui.label("Micro-Batch (B_micro):")
+                            .on_hover_text("Local micro-batch size processed per forward/backward step on each GPU");
                         changed |= ui
                             .add(egui::DragValue::new(&mut p.micro_batch_size).range(1..=512))
+                            .on_hover_text("Micro-batch size per device")
                             .changed();
                         ui.end_row();
 
-                        ui.label("Grad Accum Steps:");
+                        ui.label("Grad Accum Steps:")
+                            .on_hover_text("Gradient accumulation multiplier before executing optimizer step: Global Batch = B_micro * Grad_Accum * DP");
                         changed |= ui
                             .add(
                                 egui::DragValue::new(&mut p.gradient_accumulation_steps)
                                     .range(1..=512),
                             )
+                            .on_hover_text("Number of micro-batches accumulated before weight update")
                             .changed();
-                        ui.label("Sequence Length:");
+                        ui.label("Sequence Length:")
+                            .on_hover_text("Training sequence length in tokens");
                         changed |= ui
                             .add(
                                 egui::DragValue::new(&mut p.sequence_length)
                                     .range(64..=1_048_576)
                                     .speed(128),
                             )
+                            .on_hover_text("Sequence length per sample")
                             .changed();
                         ui.end_row();
                     });

@@ -84,6 +84,18 @@ pub struct AppState {
     pub bottom_dock_tab: BottomDockTab,
     #[serde(default)]
     pub workspace_registry: shared::WorkspaceRegistry,
+    #[serde(default)]
+    pub focus_mode: StudioFocus,
+    #[serde(default = "default_panel_visible")]
+    pub left_panel_visible: bool,
+    #[serde(default = "default_panel_visible")]
+    pub right_panel_visible: bool,
+    #[serde(default = "default_panel_visible")]
+    pub bottom_dock_visible: bool,
+}
+
+fn default_panel_visible() -> bool {
+    true
 }
 
 impl Default for AppState {
@@ -95,6 +107,10 @@ impl Default for AppState {
             canvas_mode: CanvasMode::NodeGraph,
             bottom_dock_tab: BottomDockTab::Advisor,
             workspace_registry: shared::WorkspaceRegistry::default(),
+            focus_mode: StudioFocus::Model,
+            left_panel_visible: true,
+            right_panel_visible: true,
+            bottom_dock_visible: true,
         }
     }
 }
@@ -219,6 +235,10 @@ impl AiDesignerApp {
         let mut studio = StudioState::new_with_starter(initial_spec);
         studio.canvas_mode = loaded_state.canvas_mode;
         studio.bottom_dock_tab = loaded_state.bottom_dock_tab;
+        studio.focus_mode = loaded_state.focus_mode;
+        studio.left_panel_visible = loaded_state.left_panel_visible;
+        studio.right_panel_visible = loaded_state.right_panel_visible;
+        studio.bottom_dock_visible = loaded_state.bottom_dock_visible;
 
         Self {
             state: loaded_state,
@@ -237,6 +257,10 @@ impl AiDesignerApp {
         self.state.saved_spec = Some(self.studio.spec.clone());
         self.state.canvas_mode = self.studio.canvas_mode;
         self.state.bottom_dock_tab = self.studio.bottom_dock_tab;
+        self.state.focus_mode = self.studio.focus_mode;
+        self.state.left_panel_visible = self.studio.left_panel_visible;
+        self.state.right_panel_visible = self.studio.right_panel_visible;
+        self.state.bottom_dock_visible = self.studio.bottom_dock_visible;
 
         if let Ok(json_str) = serde_json::to_string(&self.state) {
             let size = json_str.len();
@@ -302,8 +326,11 @@ impl AiDesignerApp {
     }
 
     pub fn render_designer_studio(&mut self, ui: &mut egui::Ui) {
-        // 1. Studio Sub-header Toolbar & 5-Stage Workflow Strip
-        ui.horizontal_wrapped(|ui| {
+        // -----------------------------------------------------------------
+        // ROW 1: Focus Mode Selector, Model Identity & Layout Panel Toggles
+        // -----------------------------------------------------------------
+        ui.horizontal(|ui| {
+            // Workspace Quick-Selector Button
             let (ws_name, model_count) = self
                 .state
                 .workspace_registry
@@ -330,230 +357,427 @@ impl AiDesignerApp {
 
             ui.separator();
 
+            // Active Blueprint Display Name & Model ID
             ui.heading(
                 egui::RichText::new(&self.studio.spec.metadata.display_name)
-                    .size(15.5)
+                    .size(15.0)
                     .strong(),
             );
             ui.label(
                 egui::RichText::new(format!("({})", self.studio.spec.metadata.model_id))
-                    .size(11.5)
+                    .size(11.0)
                     .monospace()
                     .color(egui::Color32::from_rgb(155, 170, 195)),
             );
 
             ui.separator();
 
-            // Stage 1: Scaffold & Wizards
+            // PRIMARY FOCUS SELECTOR (Model Architecture | Training & Optimization | Model Surgery)
+            ui.label(
+                egui::RichText::new("Focus:")
+                    .size(11.5)
+                    .color(egui::Color32::from_rgb(170, 185, 210)),
+            );
+
+            let is_model = self.studio.focus_mode == StudioFocus::Model;
             if ui
-                .button(
-                    egui::RichText::new(format!("1. {} New / Wizard", bi::MAGIC))
-                        .color(egui::Color32::from_rgb(100, 190, 255))
+                .selectable_label(
+                    is_model,
+                    egui::RichText::new(format!("{} Model Architecture", bi::DIAGRAM_3_FILL))
+                        .color(if is_model {
+                            egui::Color32::from_rgb(120, 210, 255)
+                        } else {
+                            egui::Color32::from_rgb(190, 200, 220)
+                        })
                         .strong(),
                 )
-                .on_hover_text(
-                    "Stage 1 — Scaffold: Open the guided AI Architecture Wizard (16 Archetypes, 59 Industry Blueprints, or Blank Canvas)",
-                )
+                .on_hover_text(StudioFocus::Model.description())
                 .clicked()
             {
-                self.design_wizard_modal.open();
-            }
-            if ui
-                .button(
-                    egui::RichText::new(format!("{} Plan Training Wizard", bi::SPEEDOMETER2))
-                        .color(egui::Color32::from_rgb(130, 225, 165)),
-                )
-                .on_hover_text(
-                    "Open the Guided Training Plan Wizard (12 multi-stage presets: Frontier LLM, Muon+WSD, Flow Matching, SciML Sobolev, Super-Smooth Lipschitz, Learnable QAT, Tabular SSL, etc.)",
-                )
-                .clicked()
-            {
-                self.design_wizard_modal.open_training_wizard();
+                self.studio.set_focus(StudioFocus::Model);
             }
 
-            ui.separator();
-
-            // Stage 2: Compose & Plan Training
-            ui.label(
-                egui::RichText::new("2. Compose:")
-                    .size(11.5)
-                    .color(egui::Color32::from_rgb(170, 180, 200)),
-            );
+            let is_training = self.studio.focus_mode == StudioFocus::Training;
             if ui
                 .selectable_label(
-                    self.studio.canvas_mode == CanvasMode::NodeGraph,
-                    format!(
-                        "{} Graph ({})",
-                        bi::DIAGRAM_3,
-                        self.studio.spec.graph.nodes.len()
-                    ),
+                    is_training,
+                    egui::RichText::new(format!("{} Training & Optimization", bi::SPEEDOMETER2))
+                        .color(if is_training {
+                            egui::Color32::from_rgb(130, 235, 165)
+                        } else {
+                            egui::Color32::from_rgb(190, 200, 220)
+                        })
+                        .strong(),
                 )
-                .on_hover_text("Interactive Input -> Layer -> Output dataflow graph canvas")
+                .on_hover_text(StudioFocus::Training.description())
                 .clicked()
             {
-                self.studio.canvas_mode = CanvasMode::NodeGraph;
-            }
-            if ui
-                .selectable_label(
-                    self.studio.canvas_mode == CanvasMode::OutlinerTree,
-                    format!("{} Outliner", bi::LIST_NESTED),
-                )
-                .on_hover_text("Hierarchical layer & port tree editor")
-                .clicked()
-            {
-                self.studio.canvas_mode = CanvasMode::OutlinerTree;
-            }
-            if ui
-                .selectable_label(
-                    self.studio.canvas_mode == CanvasMode::TrainingPlanner,
-                    format!(
-                        "{} Training Plan ({})",
-                        bi::SPEEDOMETER2,
-                        self.studio.spec.training.stages.len().max(1)
-                    ),
-                )
-                .on_hover_text(
-                    "Interactive Training Plan Designer: Multi-stage curriculum, LR schedule curve, 4D parallelism & Chinchilla compute budget",
-                )
-                .clicked()
-            {
-                self.studio.canvas_mode = CanvasMode::TrainingPlanner;
-            }
-            if ui
-                .selectable_label(
-                    self.studio.canvas_mode == CanvasMode::YamlSource,
-                    format!("{} YAML (.yaml)", bi::BRACES),
-                )
-                .on_hover_text("Live .yaml specification editor")
-                .clicked()
-            {
-                self.studio.canvas_mode = CanvasMode::YamlSource;
-            }
-            if ui
-                .selectable_label(
-                    self.studio.canvas_mode == CanvasMode::ModelSurgery,
-                    format!("{} Surgery & Soups", bi::SCISSORS),
-                )
-                .on_hover_text("Model Surgery & Weight Manifold Lab: Refusal abliteration, model soups (SLERP/TIES/DARE), and Frankenmerging")
-                .clicked()
-            {
-                self.studio.canvas_mode = CanvasMode::ModelSurgery;
+                self.studio.set_focus(StudioFocus::Training);
             }
 
-            ui.separator();
-
-            // Stage 3: Diagnose & Pareto
-            let finding_count = self.studio.advisor_findings.len();
-            let (adv_pill_text, adv_pill_color) = if finding_count == 0 {
-                (
-                    format!("3. {} 0 Diagnostics", bi::CHECK_CIRCLE_FILL),
-                    egui::Color32::from_rgb(120, 220, 140),
-                )
-            } else {
-                (
-                    format!("3. {} {finding_count} Diagnostics", bi::EXCLAMATION_TRIANGLE_FILL),
-                    egui::Color32::from_rgb(240, 180, 60),
-                )
-            };
+            let is_surgery = self.studio.focus_mode == StudioFocus::Surgery;
             if ui
                 .selectable_label(
-                    self.studio.bottom_dock_tab == BottomDockTab::Advisor,
-                    egui::RichText::new(adv_pill_text).color(adv_pill_color),
+                    is_surgery,
+                    egui::RichText::new(format!("{} Surgery & Soups Lab", bi::SCISSORS))
+                        .color(if is_surgery {
+                            egui::Color32::from_rgb(255, 180, 120)
+                        } else {
+                            egui::Color32::from_rgb(190, 200, 220)
+                        })
+                        .strong(),
                 )
-                .on_hover_text(
-                    "Stage 3 — Diagnose: Inspect 55+ mathematical & hardware compatibility checks with 1-click quick-fixes",
-                )
+                .on_hover_text(StudioFocus::Surgery.description())
                 .clicked()
             {
-                self.studio.bottom_dock_tab = BottomDockTab::Advisor;
+                self.studio.set_focus(StudioFocus::Surgery);
             }
 
-            if ui
-                .selectable_label(
-                    self.studio.bottom_dock_tab == BottomDockTab::ParetoExplorer,
-                    format!("{} Pareto (5)", bi::GRAPH_UP_ARROW),
-                )
-                .on_hover_text(
-                    "Stage 3 — Optimize: Compare 5 hardware-aware Pareto scaling candidates",
-                )
-                .clicked()
-            {
-                self.studio.bottom_dock_tab = BottomDockTab::ParetoExplorer;
-            }
-
-            ui.separator();
-
-            // Stage 4: Verify & Train
-            if ui
-                .selectable_label(
-                    self.studio.bottom_dock_tab == BottomDockTab::StudioRunner,
-                    format!("4. {} Verify & Train", bi::PLAY_FILL),
-                )
-                .on_hover_text(
-                    "Stage 4 — Verify: Run deterministic Seed-42 parity checks and live training convergence monitor",
-                )
-                .clicked()
-            {
-                self.studio.bottom_dock_tab = BottomDockTab::StudioRunner;
-            }
-
+            // Right-aligned Layout Toggles & Quick HUD
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Stage 5: Export & Codegen
+                // Zen Mode Toggle
+                let zen_active = !self.studio.left_panel_visible
+                    && !self.studio.right_panel_visible
+                    && !self.studio.bottom_dock_visible;
+                if ui
+                    .selectable_label(
+                        zen_active,
+                        egui::RichText::new(format!("{} Zen", bi::ARROWS_FULLSCREEN)).strong(),
+                    )
+                    .on_hover_text("Zen Mode (F11): Maximize canvas space by toggling all side panels and docks")
+                    .clicked()
+                {
+                    self.studio.toggle_zen_mode();
+                }
+
+                // Inspector Toggle
+                if ui
+                    .selectable_label(
+                        self.studio.right_panel_visible,
+                        format!("{} Inspector", bi::SLIDERS),
+                    )
+                    .on_hover_text("Toggle Right Inspector panel (Alt+3): edit node properties and precision")
+                    .clicked()
+                {
+                    self.studio.toggle_right_panel();
+                }
+
+                // Bottom Dock Toggle
+                if ui
+                    .selectable_label(
+                        self.studio.bottom_dock_visible,
+                        format!("{} Dock", bi::GRID_1X2),
+                    )
+                    .on_hover_text("Toggle Bottom Dock (Alt+2): Diagnostics, Roofline, Pareto, and Training Runner")
+                    .clicked()
+                {
+                    self.studio.toggle_bottom_dock();
+                }
+
+                // Left Palette Toggle
+                if ui
+                    .selectable_label(
+                        self.studio.left_panel_visible,
+                        format!("{} Palette", bi::LAYERS),
+                    )
+                    .on_hover_text("Toggle Left Catalog / Palette panel (Alt+1): browse layers, topics, and starter templates")
+                    .clicked()
+                {
+                    self.studio.toggle_left_panel();
+                }
+
+                ui.separator();
+
+                // Live Architecture Metrics HUD Badge
+                let param_count = self.studio.partition_report.total_param_count;
+                let param_str = if param_count >= 1_000_000_000 {
+                    format!("{:.2}B params", param_count as f64 / 1e9)
+                } else if param_count >= 1_000_000 {
+                    format!("{:.1}M params", param_count as f64 / 1e6)
+                } else if param_count >= 1_000 {
+                    format!("{:.1}K params", param_count as f64 / 1e3)
+                } else {
+                    format!("{param_count} params")
+                };
+
+                let vram_mb = (param_count as f64 * 2.0) / (1024.0 * 1024.0);
+                ui.label(
+                    egui::RichText::new(format!("{} {} | {:.0} MB (BF16)", bi::CPU, param_str, vram_mb))
+                        .size(11.0)
+                        .monospace()
+                        .color(egui::Color32::from_rgb(130, 210, 255)),
+                )
+                .on_hover_text(format!(
+                    "Live Architecture Metrics:\n• Total Parameters: {}\n• Muon 2D Weights: {} ({:.1}%)\n• AdamW 1D Vectors: {}\n• Weight Memory: {:.1} MB in BF16 (or {:.1} MB in INT4)\n• Target Accelerators: {} x {}",
+                    param_count,
+                    self.studio.partition_report.muon_param_count,
+                    self.studio.partition_report.muon_ratio * 100.0,
+                    self.studio.partition_report.adamw_param_count,
+                    vram_mb,
+                    vram_mb / 4.0,
+                    self.studio.spec.training.parallelism.total_accelerators(),
+                    self.studio.spec.metadata.target_hardware.profile_name
+                ));
+            });
+        });
+
+        ui.add_space(2.0);
+        ui.separator();
+        ui.add_space(2.0);
+
+        // -----------------------------------------------------------------
+        // ROW 2: Contextual Action Ribbon (Adapts strictly to Focus Mode!)
+        // -----------------------------------------------------------------
+        ui.horizontal(|ui| {
+            match self.studio.focus_mode {
+                StudioFocus::Model => {
+                    // Sub-view selectors: Graph, Outliner, YAML
+                    if ui
+                        .selectable_label(
+                            self.studio.canvas_mode == CanvasMode::NodeGraph,
+                            format!(
+                                "{} Graph Canvas ({})",
+                                bi::DIAGRAM_3,
+                                self.studio.spec.graph.nodes.len()
+                            ),
+                        )
+                        .on_hover_text("Interactive Input -> Layer -> Output dataflow graph canvas: drag layers, inspect wires, edit tensors")
+                        .clicked()
+                    {
+                        self.studio.canvas_mode = CanvasMode::NodeGraph;
+                    }
+
+                    if ui
+                        .selectable_label(
+                            self.studio.canvas_mode == CanvasMode::OutlinerTree,
+                            format!("{} Outliner Tree", bi::LIST_NESTED),
+                        )
+                        .on_hover_text("Hierarchical layer & port tree editor: reorder execution sequence, duplicate, and nest blocks")
+                        .clicked()
+                    {
+                        self.studio.canvas_mode = CanvasMode::OutlinerTree;
+                    }
+
+                    if ui
+                        .selectable_label(
+                            self.studio.canvas_mode == CanvasMode::YamlSource,
+                            format!("{} YAML Blueprint (.yaml)", bi::BRACES),
+                        )
+                        .on_hover_text("Direct live .yaml specification editor with bidirectional schema synchronization")
+                        .clicked()
+                    {
+                        self.studio.canvas_mode = CanvasMode::YamlSource;
+                    }
+
+                    ui.separator();
+
+                    // Model Actions: Wizard, Diagnostics, Roofline/Pareto
+                    if ui
+                        .button(
+                            egui::RichText::new(format!("{} New / Wizard", bi::MAGIC))
+                                .color(egui::Color32::from_rgb(100, 190, 255))
+                                .strong(),
+                        )
+                        .on_hover_text("Open the 7-step interactive model architecture builder, 16 research archetypes, or starter templates")
+                        .clicked()
+                    {
+                        self.design_wizard_modal.open();
+                    }
+
+                    let finding_count = self.studio.advisor_findings.len();
+                    let (adv_pill_text, adv_pill_color) = if finding_count == 0 {
+                        (
+                            format!("{} 0 Diagnostics", bi::CHECK_CIRCLE_FILL),
+                            egui::Color32::from_rgb(120, 220, 140),
+                        )
+                    } else {
+                        (
+                            format!("{} {finding_count} Diagnostics", bi::EXCLAMATION_TRIANGLE_FILL),
+                            egui::Color32::from_rgb(240, 180, 60),
+                        )
+                    };
+                    if ui
+                        .selectable_label(
+                            self.studio.bottom_dock_tab == BottomDockTab::Advisor && self.studio.bottom_dock_visible,
+                            egui::RichText::new(adv_pill_text).color(adv_pill_color),
+                        )
+                        .on_hover_text("Inspect 55+ mathematical, topological, and hardware compatibility checks with 1-click automated repairs")
+                        .clicked()
+                    {
+                        self.studio.bottom_dock_visible = true;
+                        self.studio.bottom_dock_tab = BottomDockTab::Advisor;
+                    }
+
+                    if ui
+                        .selectable_label(
+                            self.studio.bottom_dock_tab == BottomDockTab::Roofline && self.studio.bottom_dock_visible,
+                            format!("{} Roofline & VRAM", bi::BAR_CHART_LINE),
+                        )
+                        .on_hover_text("Analyze arithmetic intensity, memory bandwidth ceiling, and activation memory footprint")
+                        .clicked()
+                    {
+                        self.studio.bottom_dock_visible = true;
+                        self.studio.bottom_dock_tab = BottomDockTab::Roofline;
+                    }
+
+                    if ui
+                        .selectable_label(
+                            self.studio.bottom_dock_tab == BottomDockTab::ParetoExplorer && self.studio.bottom_dock_visible,
+                            format!(
+                                "{} Pareto Frontier ({})",
+                                bi::GRAPH_UP_ARROW,
+                                self.studio.pareto_candidates.len()
+                            ),
+                        )
+                        .on_hover_text("Compare 5 hardware-aware Pareto scaling candidates across latency, parameter count, and loss")
+                        .clicked()
+                    {
+                        self.studio.bottom_dock_visible = true;
+                        self.studio.bottom_dock_tab = BottomDockTab::ParetoExplorer;
+                    }
+                }
+                StudioFocus::Training => {
+                    // Actions for Training Focus
+                    if ui
+                        .button(
+                            egui::RichText::new(format!("{} Plan Training Wizard", bi::SPEEDOMETER2))
+                                .color(egui::Color32::from_rgb(130, 225, 165))
+                                .strong(),
+                        )
+                        .on_hover_text("Open Guided Training Plan Wizard (12 presets: Frontier LLM, Muon+WSD, SciML Sobolev, Learnable QAT, etc.)")
+                        .clicked()
+                    {
+                        self.design_wizard_modal.open_training_wizard();
+                    }
+
+                    ui.separator();
+
+                    let stage_count = self.studio.spec.training.stages.len().max(1);
+                    let total_tok: u64 = if self.studio.spec.training.stages.is_empty() {
+                        self.studio.spec.training.curriculum.total_training_tokens
+                    } else {
+                        self.studio.spec.training.stages.iter().map(|s| s.token_budget).sum()
+                    };
+                    let total_tok_str = if total_tok >= 1_000_000_000 {
+                        format!("{:.2}B", total_tok as f64 / 1e9)
+                    } else {
+                        format!("{:.1}M", total_tok as f64 / 1e6)
+                    };
+
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Curriculum: {stage_count} Stage(s) • Total Budget: {total_tok_str} Tokens"
+                        ))
+                        .size(11.5)
+                        .color(egui::Color32::from_rgb(170, 210, 185)),
+                    );
+
+                    ui.separator();
+
+                    if ui
+                        .selectable_label(
+                            self.studio.bottom_dock_tab == BottomDockTab::StudioRunner && self.studio.bottom_dock_visible,
+                            format!("{} Live Runner & Convergence", bi::PLAY_FILL),
+                        )
+                        .on_hover_text("Open the live training convergence monitor, loss curves, and Seed-42 parity verifier dock")
+                        .clicked()
+                    {
+                        self.studio.bottom_dock_visible = true;
+                        self.studio.bottom_dock_tab = BottomDockTab::StudioRunner;
+                    }
+                }
+                StudioFocus::Surgery => {
+                    // Actions for Surgery Focus
+                    ui.selectable_value(
+                        &mut self.studio.surgery_tab,
+                        SurgeryTab::Abliteration,
+                        egui::RichText::new(format!("{} Refusal Abliteration", bi::SHIELD_EXCLAMATION)).strong(),
+                    );
+                    ui.selectable_value(
+                        &mut self.studio.surgery_tab,
+                        SurgeryTab::ModelSoups,
+                        egui::RichText::new(format!("{} Model Soups (SLERP/TIES/DARE)", bi::LAYERS_FILL)).strong(),
+                    );
+                    ui.selectable_value(
+                        &mut self.studio.surgery_tab,
+                        SurgeryTab::LayerGrafting,
+                        egui::RichText::new(format!("{} Layer Grafting & Frankenmerge", bi::HDD_STACK)).strong(),
+                    );
+                    ui.selectable_value(
+                        &mut self.studio.surgery_tab,
+                        SurgeryTab::MechanisticProbes,
+                        egui::RichText::new(format!("{} Mechanistic Probes & SVD", bi::SEARCH)).strong(),
+                    );
+                }
+            }
+
+            // Right-aligned Codegen & Export controls
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Unified Export Dropdown
+                egui::ComboBox::from_id_salt("global_export_combo")
+                    .selected_text(format!("{} Export Blueprint ▾", bi::DOWNLOAD))
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(false, format!("{} Page-Aligned Package (.aidpkg)", bi::BOX_SEAM))
+                            .on_hover_text("Page-aligned container packing YAML blueprint and binary weight buffers (ideal for production)")
+                            .clicked()
+                        {
+                            if let Ok(bytes) = shared::format::aidpkg::create_aidpkg(&self.studio.spec, None, None) {
+                                let filename = format!("{}.aidpkg", self.studio.spec.metadata.model_id);
+                                trigger_binary_download(&filename, &bytes, "application/octet-stream");
+                            }
+                        }
+
+                        if ui
+                            .selectable_label(false, format!("{} Native Binary Container (.aid)", bi::FILE_EARMARK_BINARY))
+                            .on_hover_text("High-performance binary serialization with AID\\x01 magic, CRC32, and BSON payload")
+                            .clicked()
+                        {
+                            if let Ok(bytes) = shared::format::aid_envelope::pack_aid(&self.studio.spec, shared::format::AidFormatTag::Bson) {
+                                let filename = format!("{}.aid", self.studio.spec.metadata.model_id);
+                                trigger_binary_download(&filename, &bytes, "application/octet-stream");
+                            }
+                        }
+
+                        if ui
+                            .selectable_label(false, format!("{} YAML Blueprint (.yaml)", bi::FILE_EARMARK_CODE))
+                            .on_hover_text("Human-readable YAML blueprint specification with complete metadata, nodes, and training plan")
+                            .clicked()
+                        {
+                            if let Ok(yaml_str) = shared::format::aid_yaml::to_yaml_string(&self.studio.spec) {
+                                let filename = format!("{}.yaml", self.studio.spec.metadata.model_id);
+                                trigger_text_download(&filename, &yaml_str, "text/yaml;charset=utf-8");
+                            }
+                        }
+
+                        if ui
+                            .selectable_label(false, format!("{} JSON Specification (.json)", bi::FILE_EARMARK_TEXT))
+                            .on_hover_text("Strict JSON format for programmatic web tools and automated API pipelines")
+                            .clicked()
+                        {
+                            self.open_export_dialog(BlueprintExportFormat::Json);
+                        }
+
+                        if ui
+                            .selectable_label(false, format!("{} TOML Document (.toml)", bi::FILE_EARMARK_TEXT))
+                            .on_hover_text("TOML document format matching standard Cargo/Python configuration files")
+                            .clicked()
+                        {
+                            self.open_export_dialog(BlueprintExportFormat::Toml);
+                        }
+                    });
+
+                // Primary Target Code Generator Button
                 if ui
                     .button(
-                        egui::RichText::new(format!(
-                            "5. {} Generate Target Code",
-                            bi::LIGHTNING_CHARGE_FILL
-                        ))
-                        .color(egui::Color32::from_rgb(120, 220, 140))
-                        .strong(),
+                        egui::RichText::new(format!("{} Generate Target Code", bi::LIGHTNING_CHARGE_FILL))
+                            .color(egui::Color32::from_rgb(120, 220, 140))
+                            .strong(),
                     )
-                    .on_hover_text(
-                        "Stage 5 — Synthesize: Generate PyTorch 2, JAX/Equinox, Rust Candle, WebGPU WGSL, Triton & Parity Harness",
-                    )
+                    .on_hover_text("Generate verified target code: PyTorch 2, JAX/Equinox, Rust Candle, WebGPU WGSL, Triton Ops & Parity Harness")
                     .clicked()
                 {
                     self.studio.trigger_code_generation();
-                }
-
-                if ui
-                    .button(format!("{} .aidpkg", bi::BOX_SEAM))
-                    .on_hover_text("Download page-aligned binary .aidpkg package (blueprint + weights container)")
-                    .clicked()
-                {
-                    if let Ok(bytes) =
-                        shared::format::aidpkg::create_aidpkg(&self.studio.spec, None, None)
-                    {
-                        let filename = format!("{}.aidpkg", self.studio.spec.metadata.model_id);
-                        trigger_binary_download(&filename, &bytes, "application/octet-stream");
-                    }
-                }
-
-                if ui
-                    .button(format!("{} .aid", bi::FILE_EARMARK_BINARY))
-                    .on_hover_text("Download native binary .aid byte format (AID\\x01 header + CRC32 + BSON payload)")
-                    .clicked()
-                {
-                    if let Ok(bytes) = shared::format::aid_envelope::pack_aid(
-                        &self.studio.spec,
-                        shared::format::AidFormatTag::Bson,
-                    ) {
-                        let filename = format!("{}.aid", self.studio.spec.metadata.model_id);
-                        trigger_binary_download(&filename, &bytes, "application/octet-stream");
-                    }
-                }
-
-                if ui
-                    .button(format!("{} .yaml", bi::FILE_EARMARK_CODE))
-                    .on_hover_text("Download human-readable .yaml blueprint specification")
-                    .clicked()
-                {
-                    if let Ok(yaml_str) =
-                        shared::format::aid_yaml::to_yaml_string(&self.studio.spec)
-                    {
-                        let filename = format!("{}.yaml", self.studio.spec.metadata.model_id);
-                        trigger_text_download(&filename, &yaml_str, "text/yaml;charset=utf-8");
-                    }
                 }
             });
         });
@@ -561,100 +785,121 @@ impl AiDesignerApp {
         ui.add_space(4.0);
         ui.separator();
 
-        // 2. Left Sidepanel: Palette
-        egui::Panel::left("studio_palette_panel")
-            .resizable(true)
-            .default_size(260.0)
-            .show(ui, |ui| {
-                self.palette_view.render(ui, &mut self.studio);
-            });
+        // 2. Left Sidepanel: Palette / Catalog (only when visible)
+        if self.studio.left_panel_visible {
+            egui::Panel::left("studio_palette_panel")
+                .resizable(true)
+                .default_size(260.0)
+                .show(ui, |ui| {
+                    self.palette_view.render(ui, &mut self.studio);
+                });
+        }
 
-        // 3. Right Sidepanel: Inspector
-        egui::Panel::right("studio_inspector_panel")
-            .resizable(true)
-            .default_size(280.0)
-            .show(ui, |ui| {
-                self.inspector_view.render(ui, &mut self.studio);
-            });
+        // 3. Right Sidepanel: Inspector (only when visible)
+        if self.studio.right_panel_visible {
+            egui::Panel::right("studio_inspector_panel")
+                .resizable(true)
+                .default_size(280.0)
+                .show(ui, |ui| {
+                    self.inspector_view.render(ui, &mut self.studio);
+                });
+        }
 
-        // 4. Bottom Panel: Collapsible Advisor, Roofline, Pareto & Runner Dock
-        egui::Panel::bottom("studio_bottom_dock")
-            .resizable(true)
-            .default_size(200.0)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let adv_badge = format!(
-                        "{} Advisor ({})",
-                        bi::SHIELD_CHECK,
-                        self.studio.advisor_findings.len()
-                    );
-                    if ui
-                        .selectable_label(
-                            self.studio.bottom_dock_tab == BottomDockTab::Advisor,
-                            adv_badge,
-                        )
-                        .clicked()
-                    {
-                        self.studio.bottom_dock_tab = BottomDockTab::Advisor;
-                    }
-                    if ui
-                        .selectable_label(
-                            self.studio.bottom_dock_tab == BottomDockTab::Roofline,
-                            format!("{} Hardware Roofline & VRAM", bi::BAR_CHART_LINE),
-                        )
-                        .clicked()
-                    {
-                        self.studio.bottom_dock_tab = BottomDockTab::Roofline;
-                    }
-                    let pareto_badge = format!(
-                        "{} Pareto Frontier ({})",
-                        bi::GRAPH_UP_ARROW,
-                        self.studio.pareto_candidates.len()
-                    );
-                    if ui
-                        .selectable_label(
-                            self.studio.bottom_dock_tab == BottomDockTab::ParetoExplorer,
-                            pareto_badge,
-                        )
-                        .clicked()
-                    {
-                        self.studio.bottom_dock_tab = BottomDockTab::ParetoExplorer;
-                    }
-                    if ui
-                        .selectable_label(
-                            self.studio.bottom_dock_tab == BottomDockTab::StudioRunner,
-                            format!("{} Training & Parity Runner", bi::PLAY_FILL),
-                        )
-                        .clicked()
-                    {
-                        self.studio.bottom_dock_tab = BottomDockTab::StudioRunner;
-                    }
-                    if ui
-                        .selectable_label(
-                            self.studio.bottom_dock_tab == BottomDockTab::ModelSurgery,
-                            format!("{} Surgery Lab", bi::SCISSORS),
-                        )
-                        .clicked()
-                    {
-                        self.studio.bottom_dock_tab = BottomDockTab::ModelSurgery;
+        // 4. Bottom Panel: Collapsible Advisor, Roofline, Pareto & Runner Dock (only when visible)
+        if self.studio.bottom_dock_visible {
+            egui::Panel::bottom("studio_bottom_dock")
+                .resizable(true)
+                .default_size(200.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let adv_badge = format!(
+                            "{} Advisor ({})",
+                            bi::SHIELD_CHECK,
+                            self.studio.advisor_findings.len()
+                        );
+                        if ui
+                            .selectable_label(
+                                self.studio.bottom_dock_tab == BottomDockTab::Advisor,
+                                adv_badge,
+                            )
+                            .on_hover_text("Inspect 55+ mathematical, shape, and hardware compatibility checks with auto-fixes")
+                            .clicked()
+                        {
+                            self.studio.bottom_dock_tab = BottomDockTab::Advisor;
+                        }
+                        if ui
+                            .selectable_label(
+                                self.studio.bottom_dock_tab == BottomDockTab::Roofline,
+                                format!("{} Hardware Roofline & VRAM", bi::BAR_CHART_LINE),
+                            )
+                            .on_hover_text("Hardware arithmetic intensity and activation memory analysis")
+                            .clicked()
+                        {
+                            self.studio.bottom_dock_tab = BottomDockTab::Roofline;
+                        }
+                        let pareto_badge = format!(
+                            "{} Pareto Frontier ({})",
+                            bi::GRAPH_UP_ARROW,
+                            self.studio.pareto_candidates.len()
+                        );
+                        if ui
+                            .selectable_label(
+                                self.studio.bottom_dock_tab == BottomDockTab::ParetoExplorer,
+                                pareto_badge,
+                            )
+                            .on_hover_text("5 hardware-aware Pareto scaling candidates")
+                            .clicked()
+                        {
+                            self.studio.bottom_dock_tab = BottomDockTab::ParetoExplorer;
+                        }
+                        if ui
+                            .selectable_label(
+                                self.studio.bottom_dock_tab == BottomDockTab::StudioRunner,
+                                format!("{} Training & Parity Runner", bi::PLAY_FILL),
+                            )
+                            .on_hover_text("Live loss curve, gradient norms, Seed-42 parity checks, and local environment setup")
+                            .clicked()
+                        {
+                            self.studio.bottom_dock_tab = BottomDockTab::StudioRunner;
+                        }
+                        if ui
+                            .selectable_label(
+                                self.studio.bottom_dock_tab == BottomDockTab::ModelSurgery,
+                                format!("{} Surgery Lab", bi::SCISSORS),
+                            )
+                            .on_hover_text("Post-training weight manifold manipulation and abliteration lab")
+                            .clicked()
+                        {
+                            self.studio.bottom_dock_tab = BottomDockTab::ModelSurgery;
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .small_button(bi::X_LG)
+                                .on_hover_text("Hide bottom dock (Alt+2)")
+                                .clicked()
+                            {
+                                self.studio.bottom_dock_visible = false;
+                            }
+                        });
+                    });
+                    ui.separator();
+
+                    match self.studio.bottom_dock_tab {
+                        BottomDockTab::Advisor => self.advisor_dock_view.render(ui, &mut self.studio),
+                        BottomDockTab::Roofline => self.roofline_dock_view.render(ui, &mut self.studio),
+                        BottomDockTab::ParetoExplorer => self
+                            .roofline_dock_view
+                            .render_pareto_explorer(ui, &mut self.studio),
+                        BottomDockTab::StudioRunner => {
+                            self.studio_runner_view.render(ui, &mut self.studio)
+                        }
+                        BottomDockTab::ModelSurgery => {
+                            self.model_surgery_view.render(ui, &mut self.studio)
+                        }
                     }
                 });
-                ui.separator();
-
-                match self.studio.bottom_dock_tab {
-                    BottomDockTab::Advisor => self.advisor_dock_view.render(ui, &mut self.studio),
-                    BottomDockTab::Roofline => self.roofline_dock_view.render(ui, &mut self.studio),
-                    BottomDockTab::ParetoExplorer => self
-                        .roofline_dock_view
-                        .render_pareto_explorer(ui, &mut self.studio),
-                    BottomDockTab::StudioRunner => {
-                        self.studio_runner_view.render(ui, &mut self.studio)
-                    }
-                    BottomDockTab::ModelSurgery => {
-                        self.model_surgery_view.render(ui, &mut self.studio)
-                    }
-                }
-            });
+        }
 
         // 5. Central Canvas Panel
         egui::CentralPanel::default().show(ui, |ui| match self.studio.canvas_mode {
@@ -713,6 +958,29 @@ impl AiDesignerApp {
         }
 
         if self.state.active_page == AppPage::Designer && !ctx.egui_wants_keyboard_input() {
+            // Layout & Focus Shortcuts
+            if ctx.input(|i| i.key_pressed(egui::Key::F11)) {
+                self.studio.toggle_zen_mode();
+            }
+            if ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::Num1)) {
+                self.studio.toggle_left_panel();
+            }
+            if ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::Num2)) {
+                self.studio.toggle_bottom_dock();
+            }
+            if ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::Num3)) {
+                self.studio.toggle_right_panel();
+            }
+            if ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::M)) {
+                self.studio.set_focus(StudioFocus::Model);
+            }
+            if ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::T)) {
+                self.studio.set_focus(StudioFocus::Training);
+            }
+            if ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::S)) {
+                self.studio.set_focus(StudioFocus::Surgery);
+            }
+
             if ctx
                 .input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace))
             {
@@ -731,6 +999,10 @@ impl eframe::App for AiDesignerApp {
         self.state.saved_spec = Some(self.studio.spec.clone());
         self.state.canvas_mode = self.studio.canvas_mode;
         self.state.bottom_dock_tab = self.studio.bottom_dock_tab;
+        self.state.focus_mode = self.studio.focus_mode;
+        self.state.left_panel_visible = self.studio.left_panel_visible;
+        self.state.right_panel_visible = self.studio.right_panel_visible;
+        self.state.bottom_dock_visible = self.studio.bottom_dock_visible;
 
         // 2. Write standard RON state to eframe::APP_KEY
         eframe::set_value(storage, eframe::APP_KEY, &self.state);

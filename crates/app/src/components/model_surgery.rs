@@ -154,7 +154,8 @@ impl ModelSurgeryView {
                             .num_columns(2)
                             .spacing([16.0, 6.0])
                             .show(ui, |ui| {
-                                ui.label(RichText::new("Layer Range:").strong());
+                                ui.label(RichText::new("Layer Range:").strong())
+                                    .on_hover_text("Layer index interval [start, end] where directional orthogonalization or concept subtraction is applied");
                                 ui.horizontal(|ui| {
                                     ui.add(
                                         egui::Slider::new(
@@ -162,38 +163,45 @@ impl ModelSurgeryView {
                                             0..=32,
                                         )
                                         .text("Start"),
-                                    );
+                                    )
+                                    .on_hover_text("First transformer layer index to ablate");
                                     ui.add(
                                         egui::Slider::new(
                                             &mut state.abliteration_plan.layer_end,
                                             0..=32,
                                         )
                                         .text("End"),
-                                    );
+                                    )
+                                    .on_hover_text("Last transformer layer index to ablate");
                                 });
                                 ui.end_row();
 
-                                ui.label(RichText::new("Projection Strength:").strong());
+                                ui.label(RichText::new("Projection Strength:").strong())
+                                    .on_hover_text("Projection multiplier: 1.0 projects weights purely orthogonal to the refusal direction; < 1.0 partially attenuates; > 1.0 over-steers");
                                 ui.add(
                                     egui::Slider::new(
                                         &mut state.abliteration_plan.projection_strength,
                                         0.0..=2.0,
                                     )
                                     .text("Scalar Factor (1.0 = Pure Null Space)"),
-                                );
+                                )
+                                .on_hover_text("Scaling coefficient for projection subtraction W' = W - α * (W·r)r^T");
                                 ui.end_row();
 
-                                ui.label(RichText::new("Anti-Degeneration:").strong());
+                                ui.label(RichText::new("Anti-Degeneration:").strong())
+                                    .on_hover_text("Constrains projection to maintain orthogonality with top principal components of general knowledge to prevent capability collapse");
                                 ui.checkbox(
                                     &mut state.abliteration_plan.anti_degeneration_guard,
                                     "Preserve math/coding manifold (PCA nulling)",
-                                );
+                                )
+                                .on_hover_text("Safeguard reasoning, mathematics, and code abilities during refusal ablation");
                                 ui.end_row();
 
                                 if state.abliteration_plan.technique
                                     == AbliterationTechnique::LeaceConceptErasure
                                 {
-                                    ui.label(RichText::new("LEACE Covariance Alpha:").strong());
+                                    ui.label(RichText::new("LEACE Covariance Alpha:").strong())
+                                        .on_hover_text("Covariance shrinkage parameter for the LEACE closed-form concept erasure estimator");
                                     ui.add(
                                         egui::Slider::new(
                                             &mut state.abliteration_plan.leace_alpha,
@@ -201,7 +209,8 @@ impl ModelSurgeryView {
                                         )
                                         .logarithmic(true)
                                         .text("Regularization"),
-                                    );
+                                    )
+                                    .on_hover_text("Shrinkage hyperparameter preventing ill-conditioned covariance inversion");
                                     ui.end_row();
                                 }
                             });
@@ -218,6 +227,7 @@ impl ModelSurgeryView {
                                 .color(Color32::from_rgb(255, 120, 120))
                                 .strong(),
                             )
+                            .on_hover_text("Run directional projection on model weight tensors and compute cosine similarity diffs")
                             .clicked()
                         {
                             let res = execute_abliteration(&state.spec, &state.abliteration_plan);
@@ -440,31 +450,37 @@ impl ModelSurgeryView {
                         // Strategy-Specific Hyperparameters
                         match state.soup_recipe.strategy {
                             ModelSoupStrategy::TiesMerging | ModelSoupStrategy::DareTies => {
-                                ui.label(RichText::new("TIES Trim Density:").strong());
+                                ui.label(RichText::new("TIES Trim Density:").strong())
+                                    .on_hover_text("Fraction of highest-magnitude delta-weights retained per checkpoint; the bottom (1-p) are trimmed to eliminate interference");
                                 ui.add(
                                     egui::Slider::new(
                                         &mut state.soup_recipe.trim_density,
                                         0.05..=0.60,
                                     )
                                     .text("Top-p% parameters kept (rest zeroed)"),
-                                );
+                                )
+                                .on_hover_text("TIES density parameter p: values between 0.2 and 0.4 offer optimal interference elimination");
                             }
                             ModelSoupStrategy::DareLinear => {
-                                ui.label(RichText::new("DARE Drop Probability:").strong());
+                                ui.label(RichText::new("DARE Drop Probability:").strong())
+                                    .on_hover_text("Bernoulli mask probability p dropping random delta-weight coordinates with (1/(1-p)) rescaling");
                                 ui.add(
                                     egui::Slider::new(
                                         &mut state.soup_recipe.dare_drop_prob,
                                         0.10..=0.95,
                                     )
                                     .text("Random drop rate p"),
-                                );
+                                )
+                                .on_hover_text("Drop And REscale probability");
                             }
                             ModelSoupStrategy::Slerp => {
-                                ui.label(RichText::new("SLERP Interpolation (t):").strong());
+                                ui.label(RichText::new("SLERP Interpolation (t):").strong())
+                                    .on_hover_text("Spherical Linear Interpolation coefficient on the hyperspherical weight manifold");
                                 ui.add(
                                     egui::Slider::new(&mut state.soup_recipe.slerp_t, 0.0..=1.0)
                                         .text("0.0 = Model A, 1.0 = Model B"),
-                                );
+                                )
+                                .on_hover_text("Interpolation factor t (0.5 = exact geodesic midpoint)");
                             }
                             _ => {}
                         }
@@ -476,6 +492,7 @@ impl ModelSurgeryView {
                                     .color(Color32::from_rgb(120, 220, 140))
                                     .strong(),
                             )
+                            .on_hover_text("Execute weight manifold merging algorithm across all registered fine-tuned checkpoints")
                             .clicked()
                         {
                             let res = execute_soup_merge(&state.spec, &state.soup_recipe);
@@ -608,14 +625,16 @@ impl ModelSurgeryView {
                                         0..=32,
                                     )
                                     .text("Start Layer"),
-                                );
+                                )
+                                .on_hover_text("Initial layer index of source donor model to graft");
                                 ui.add(
                                     egui::Slider::new(
                                         &mut state.grafting_plan.source_layer_end,
                                         0..=32,
                                     )
                                     .text("End Layer"),
-                                );
+                                )
+                                .on_hover_text("Final layer index of source donor model to graft");
                             });
                             ui.add(
                                 egui::Slider::new(
@@ -623,26 +642,31 @@ impl ModelSurgeryView {
                                     1.0..=2.0,
                                 )
                                 .text("Depth Expansion Multiplier"),
-                            );
+                            )
+                            .on_hover_text("Total depth scaling factor (e.g. 1.5x depth creates a 48-layer model from a 32-layer baseline)");
                         }
                         GraftingStrategy::LoRAAdapterFusion => {
                             ui.add(
                                 egui::Slider::new(&mut state.grafting_plan.lora_rank, 4..=128)
                                     .text("Adapter Rank (r)"),
-                            );
+                            )
+                            .on_hover_text("Low-rank bottleneck dimension r for the fused adapter matrices");
                             ui.add(
                                 egui::Slider::new(&mut state.grafting_plan.lora_alpha, 8.0..=256.0)
                                     .text("LoRA Alpha Scaling"),
-                            );
+                            )
+                            .on_hover_text("LoRA scaling factor α (effective multiplier = α / r)");
                         }
                         GraftingStrategy::LayerPruningSurgery => {
                             ui.add(
                                 egui::Slider::new(&mut state.grafting_plan.prune_count, 1..=8)
                                     .text("Layers to Prune (Identity Cosine)"),
-                            );
+                            )
+                            .on_hover_text("Number of least-impactful layers to excise, selected by cosine similarity to identity mapping");
                         }
                         GraftingStrategy::CrossArchitectureBridge => {
-                            ui.label("Connects vision/speech encoder projections into autoregressive decoder backbone.");
+                            ui.label("Connects vision/speech encoder projections into autoregressive decoder backbone.")
+                                .on_hover_text("Initializes cross-attention and projection bridges between distinct modality backbones");
                         }
                     }
 

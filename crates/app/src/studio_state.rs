@@ -21,6 +21,33 @@ pub enum CanvasMode {
     YamlSource,
 }
 
+/// Primary studio focus mode: isolates the workspace to a single discipline without clutter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum StudioFocus {
+    #[default]
+    Model,     // Model architecture, layers, dataflow graph, outliner, YAML
+    Training,  // Training plan, stages, compute budget, curriculum, live runner
+    Surgery,   // Post-training surgery, refusal abliteration, model soups, grafting
+}
+
+impl StudioFocus {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Model => "Model Architecture",
+            Self::Training => "Training & Optimization",
+            Self::Surgery => "Model Surgery & Soups",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::Model => "Design neural network layers, tensor ports, residual wiring, and export code (Graph, Outliner, YAML)",
+            Self::Training => "Configure multi-stage curriculum, optimizers (Muon/AdamW), 4D parallelism, compute budgets, and live runner",
+            Self::Surgery => "Perform post-training weight surgery: refusal abliteration, SLERP/TIES model soups, and Frankenmerging",
+        }
+    }
+}
+
 /// Active bottom dock tab.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum BottomDockTab {
@@ -190,6 +217,12 @@ pub struct StudioState {
     pub soup_result: Option<shared::SoupMergeResult>,
     pub grafting_plan: shared::GraftingPlan,
     pub grafting_result: Option<shared::GraftingExecutionResult>,
+
+    // Workflow Discipline Focus & Layout Panel Visibility
+    pub focus_mode: StudioFocus,
+    pub left_panel_visible: bool,
+    pub right_panel_visible: bool,
+    pub bottom_dock_visible: bool,
 }
 
 impl StudioState {
@@ -233,9 +266,70 @@ impl StudioState {
             soup_result: None,
             grafting_plan: shared::GraftingPlan::default(),
             grafting_result: None,
+            focus_mode: StudioFocus::Model,
+            left_panel_visible: true,
+            right_panel_visible: true,
+            bottom_dock_visible: true,
         };
         studio.auto_layout_nodes();
         studio
+    }
+
+    /// Toggles the left palette / stage catalog panel.
+    pub fn toggle_left_panel(&mut self) {
+        self.left_panel_visible = !self.left_panel_visible;
+    }
+
+    /// Toggles the right property inspector panel.
+    pub fn toggle_right_panel(&mut self) {
+        self.right_panel_visible = !self.right_panel_visible;
+    }
+
+    /// Toggles the bottom diagnostics / runner dock.
+    pub fn toggle_bottom_dock(&mut self) {
+        self.bottom_dock_visible = !self.bottom_dock_visible;
+    }
+
+    /// Toggles Zen Mode: hides all side panels and docks to maximize canvas space, or restores them.
+    pub fn toggle_zen_mode(&mut self) {
+        if self.left_panel_visible || self.right_panel_visible || self.bottom_dock_visible {
+            self.left_panel_visible = false;
+            self.right_panel_visible = false;
+            self.bottom_dock_visible = false;
+        } else {
+            self.left_panel_visible = true;
+            self.right_panel_visible = true;
+            self.bottom_dock_visible = true;
+        }
+    }
+
+    /// Switches the primary studio focus mode, cleanly configuring views without clutter.
+    pub fn set_focus(&mut self, focus: StudioFocus) {
+        self.focus_mode = focus;
+        match focus {
+            StudioFocus::Model => {
+                if matches!(
+                    self.canvas_mode,
+                    CanvasMode::TrainingPlanner | CanvasMode::ModelSurgery
+                ) {
+                    self.canvas_mode = CanvasMode::NodeGraph;
+                }
+                if matches!(
+                    self.bottom_dock_tab,
+                    BottomDockTab::StudioRunner | BottomDockTab::ModelSurgery
+                ) {
+                    self.bottom_dock_tab = BottomDockTab::Advisor;
+                }
+            }
+            StudioFocus::Training => {
+                self.canvas_mode = CanvasMode::TrainingPlanner;
+                self.bottom_dock_tab = BottomDockTab::StudioRunner;
+            }
+            StudioFocus::Surgery => {
+                self.canvas_mode = CanvasMode::ModelSurgery;
+                self.bottom_dock_tab = BottomDockTab::ModelSurgery;
+            }
+        }
     }
 
     /// Re-evaluates all analytical and advisory engines against current spec.
