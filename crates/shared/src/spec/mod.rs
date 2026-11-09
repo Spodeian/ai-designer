@@ -5,6 +5,7 @@ pub mod graph;
 pub mod io;
 pub mod operators;
 pub mod precision;
+pub mod tradeoff;
 pub mod training;
 
 pub use archetypes::*;
@@ -12,6 +13,7 @@ pub use graph::*;
 pub use io::*;
 pub use operators::*;
 pub use precision::*;
+pub use tradeoff::*;
 pub use training::*;
 
 use serde::{Deserialize, Serialize};
