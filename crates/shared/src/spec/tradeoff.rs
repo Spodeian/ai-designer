@@ -84,8 +84,14 @@ impl DataModificationIntent {
 pub enum QuantizationTier {
     /// 1.58-bit Ternary {-1, 0, +1} (BitNet 1.58b / 2-bit storage)
     BitNet158b,
+    /// 4-bit Generalized Distribution Float (Student-t, Laplace, Cauchy, Empirical)
+    DistributionFloat4,
     /// 4-bit NormalFloat Quantile (NF4)
     NF4,
+    /// 8-bit Unum Type III Tapered Floating Point (Posit8)
+    Posit8,
+    /// 8-bit Logarithmic Number System (LNS8)
+    LNS8,
     /// 8-bit Microfloat (FP8 E4M3)
     FP8,
     /// 16-bit Brain Floating Point (BF16)
@@ -97,7 +103,10 @@ pub enum QuantizationTier {
 impl QuantizationTier {
     pub const ALL: &'static [QuantizationTier] = &[
         Self::BitNet158b,
+        Self::DistributionFloat4,
         Self::NF4,
+        Self::Posit8,
+        Self::LNS8,
         Self::FP8,
         Self::BF16,
         Self::FP32,
@@ -106,7 +115,10 @@ impl QuantizationTier {
     pub fn name(&self) -> &'static str {
         match self {
             Self::BitNet158b => "BitNet 1.58b (Ternary)",
+            Self::DistributionFloat4 => "DistFloat4 (Generalized Quantile)",
             Self::NF4 => "NF4 (4-Bit NormalFloat)",
+            Self::Posit8 => "Posit8 (8-Bit Unum Type III)",
+            Self::LNS8 => "LNS8 (8-Bit Logarithmic)",
             Self::FP8 => "FP8 (8-Bit Minifloat)",
             Self::BF16 => "BF16 (16-Bit Bfloat)",
             Self::FP32 => "FP32 (32-Bit IEEE 754)",
@@ -116,7 +128,10 @@ impl QuantizationTier {
     pub fn bits(&self) -> f64 {
         match self {
             Self::BitNet158b => 1.585,
+            Self::DistributionFloat4 => 4.0,
             Self::NF4 => 4.0,
+            Self::Posit8 => 8.0,
+            Self::LNS8 => 8.0,
             Self::FP8 => 8.0,
             Self::BF16 => 16.0,
             Self::FP32 => 32.0,
@@ -126,7 +141,10 @@ impl QuantizationTier {
     pub fn precision_format(&self) -> PrecisionFormat {
         match self {
             Self::BitNet158b => PrecisionFormat::BitNet158b,
+            Self::DistributionFloat4 => PrecisionFormat::DistributionFloat4,
             Self::NF4 => PrecisionFormat::NF4,
+            Self::Posit8 => PrecisionFormat::Posit8_1,
+            Self::LNS8 => PrecisionFormat::LNS8,
             Self::FP8 => PrecisionFormat::FP8E4M3FN,
             Self::BF16 => PrecisionFormat::BF16,
             Self::FP32 => PrecisionFormat::FP32,
@@ -182,14 +200,14 @@ impl QuantizationSizingEstimator {
                     v if v <= 24.0 => (5120, 48, 40),
                     _ => (8192, 64, 64),
                 },
-                QuantizationTier::NF4 => match usable_vram_gb {
+                QuantizationTier::DistributionFloat4 | QuantizationTier::NF4 => match usable_vram_gb {
                     v if v <= 4.0 => (1024, 20, 8),
                     v if v <= 8.0 => (1792, 28, 14),
                     v if v <= 16.0 => (2816, 36, 22),
                     v if v <= 24.0 => (3584, 40, 28),
                     _ => (5120, 56, 40),
                 },
-                QuantizationTier::FP8 => match usable_vram_gb {
+                QuantizationTier::Posit8 | QuantizationTier::LNS8 | QuantizationTier::FP8 => match usable_vram_gb {
                     v if v <= 4.0 => (768, 16, 12),
                     v if v <= 8.0 => (1280, 24, 16),
                     v if v <= 16.0 => (2048, 32, 16),
@@ -254,8 +272,20 @@ impl QuantizationSizingEstimator {
                     total_params / 1_000_000,
                     d_model
                 ),
+                QuantizationTier::DistributionFloat4 => format!(
+                    "Generalized Quantile: {}M params. Exact quantile allocation for heavy-tailed activations (Student-t) or sparse routing (Laplace).",
+                    total_params / 1_000_000
+                ),
                 QuantizationTier::NF4 => format!(
                     "Optimal QLoRA density: {}M params. Balances high accuracy with 4-bit normal float compression.",
+                    total_params / 1_000_000
+                ),
+                QuantizationTier::Posit8 => format!(
+                    "Tapered golden zone: {}M params. Unum Type III Posit dynamic range outperforming IEEE float precision at 8 bits.",
+                    total_params / 1_000_000
+                ),
+                QuantizationTier::LNS8 => format!(
+                    "Logarithmic LNS: {}M params. Exact multiplication and scale-free dynamic range for exponential and power-law signals.",
                     total_params / 1_000_000
                 ),
                 QuantizationTier::FP8 => format!(

@@ -58,6 +58,8 @@ pub enum PrecisionFormat {
     INT4Asym,
     #[serde(rename = "nf4", alias = "n_f4")]
     NF4,
+    #[serde(rename = "distribution_float4", alias = "dist_float4")]
+    DistributionFloat4,
     #[serde(rename = "sf4", alias = "s_f4")]
     SF4,
     #[serde(rename = "int2", alias = "i_n_t2")]
@@ -112,6 +114,7 @@ impl PrecisionFormat {
             | Self::INT4Sym
             | Self::INT4Asym
             | Self::NF4
+            | Self::DistributionFloat4
             | Self::SF4 => 4.25,
             Self::E8LatticeQTIP => 2.5,
             Self::INT2 => 2.0,
@@ -275,6 +278,7 @@ impl PrecisionFormat {
             Self::INT4Sym => "INT4 Symmetric (GPTQ / AWQ)",
             Self::INT4Asym => "INT4 Asymmetric (Zero-Point Offset)",
             Self::NF4 => "NF4 (NormalFloat-4 QLoRA)",
+            Self::DistributionFloat4 => "DistributionFloat-4 (Student-t / Laplace / Cauchy Quantiles)",
             Self::SF4 => "SF4 (Signed Float 4-bit)",
             Self::INT2 => "INT2 (2-bit Compressed)",
             Self::BitNet158b => "BitNet b1.58 (Native Ternary {-1, 0, +1})",
