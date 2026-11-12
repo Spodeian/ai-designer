@@ -17,7 +17,7 @@ edition = "2024"
 license = "CC-BY-NC-SA-4.0"
 readme = "README.md"
 description = "Custom AI Designer Studio & Multi-Backend Engineering Suite"
-repository = "https://github.com/Spodeian/AI-Examples"
+repository = "https://github.com/Spodeian/ai-designer"
 
 [workspace.dependencies]
 eframe = { version = "0.36", default-features = false, features = ["default_fonts"] }
@@ -52,11 +52,11 @@ criterion = "0.5"
 wasm-bindgen-test = "0.3"
 winit = { version = "0.30", default-features = false }
 android-activity = { version = "0.6", default-features = false, features = ["native-activity"] }
-spodeian-cache = { git = "https://github.com/Flaming-Chicken/spodeian-core", branch = "main", version = "^1.0.0" }
-spodeian-tokens = { git = "https://github.com/Flaming-Chicken/spodeian-core", branch = "main", version = "^1.0.0" }
-spodeian-telemetry = { git = "https://github.com/Flaming-Chicken/spodeian-core", branch = "main", version = "^1.0.0" }
-spodeian-web-utils = { git = "https://github.com/Flaming-Chicken/spodeian-core", branch = "main", version = "^1.0.0" }
-spodeian-ui = { git = "https://github.com/Flaming-Chicken/spodeian-core", branch = "main", version = "^1.0.0" }
+spodeian-cache = { git = "https://github.com/Spodeian/spodeian-core", tag = "v2.0.0", version = "^1.1.0" }
+spodeian-tokens = { git = "https://github.com/Spodeian/spodeian-core", tag = "v2.0.0", version = "^1.1.0" }
+spodeian-telemetry = { git = "https://github.com/Spodeian/spodeian-core", tag = "v2.0.0", version = "^1.1.0" }
+spodeian-web-utils = { git = "https://github.com/Spodeian/spodeian-core", tag = "v2.0.0", version = "^1.1.0" }
+spodeian-ui = { git = "https://github.com/Spodeian/spodeian-core", tag = "v2.0.0", version = "^1.0.0" }
 
 [profile.release]
 opt-level = 3
