@@ -30,6 +30,7 @@ pub enum ArchitectureArchetype {
     TabularPriorNetwork,
     DeepResidual,
     DenseMoE,
+    SymbolicAstReasoning,
 }
 
 impl ArchitectureArchetype {
@@ -50,6 +51,7 @@ impl ArchitectureArchetype {
         ArchitectureArchetype::TabularPriorNetwork,
         ArchitectureArchetype::DeepResidual,
         ArchitectureArchetype::DenseMoE,
+        ArchitectureArchetype::SymbolicAstReasoning,
     ];
 
     pub fn display_name(&self) -> &'static str {
@@ -76,6 +78,9 @@ impl ArchitectureArchetype {
             Self::TabularPriorNetwork => "TabPFN Monotonic Prior-Data Network",
             Self::DeepResidual => "Deep Pre-LN Residual Network",
             Self::DenseMoE => "Sparse MoE Mixture-of-Experts",
+            Self::SymbolicAstReasoning => {
+                "Symbolic AST DAG Reasoning (Tree-Transformer + Equality Saturation)"
+            }
         }
     }
 
@@ -97,6 +102,7 @@ impl ArchitectureArchetype {
             Self::TabularPriorNetwork => "TabularAndClassicalML",
             Self::DeepResidual => "GeneralDeepLearning",
             Self::DenseMoE => "FrontierArchitectures",
+            Self::SymbolicAstReasoning => "SymbolicAndMathematicalReasoning",
         }
     }
 
@@ -150,6 +156,9 @@ impl ArchitectureArchetype {
             Self::DenseMoE => {
                 "Multi-Head Latent Attention (MLA) and DeepSeek-style top-k sparse router."
             }
+            Self::SymbolicAstReasoning => {
+                "Equivalence-aware DAG-NN and Tree-Relative Transformer for mathematical AST embeddings, theorem proving, and term rewriting."
+            }
         }
     }
 
@@ -171,6 +180,7 @@ impl ArchitectureArchetype {
             Self::TabularPriorNetwork => "\u{f5aa}",      // bi-table
             Self::DeepResidual => "\u{f45b}",             // bi-layers
             Self::DenseMoE => "\u{f544}",                 // bi-shuffle
+            Self::SymbolicAstReasoning => "\u{f6ff}",     // diagram-tree
         }
     }
 
@@ -192,6 +202,7 @@ impl ArchitectureArchetype {
             Self::TabularPriorNetwork => 64,
             Self::DeepResidual => 256,
             Self::DenseMoE => 512,
+            Self::SymbolicAstReasoning => 256,
         }
     }
 
@@ -213,6 +224,7 @@ impl ArchitectureArchetype {
             Self::TabularPriorNetwork => 3,
             Self::DeepResidual => 4,
             Self::DenseMoE => 4,
+            Self::SymbolicAstReasoning => 4,
         }
     }
 }
@@ -984,6 +996,113 @@ pub fn scaffold_archetype(
                     in_features: d_model,
                     out_features: 32000,
                     bias: false,
+                },
+                precision: Some(PrecisionFormat::FP32),
+                ..Default::default()
+            });
+            spec.graph.nodes = nodes;
+        }
+        ArchitectureArchetype::SymbolicAstReasoning => {
+            spec.metadata.tags = vec![
+                "symbolic".to_string(),
+                "ast".to_string(),
+                "dag".to_string(),
+                "tree_transformer".to_string(),
+                "equality_saturation".to_string(),
+            ];
+            spec.inputs = vec![InputPortSpec {
+                id: "ast_tokens".to_string(),
+                name: "Canonical AST Operator Tokens".to_string(),
+                space: TensorSpace::DiscreteTokens {
+                    vocab_size: 1024,
+                    is_causal: false,
+                },
+                symbolic_shape: vec![SymbolicDim::from("batch"), SymbolicDim::from("ast_nodes")],
+                coordinate_encoding: CoordinateEncoding::None,
+                normalizer: NormalizerSpec::None,
+                patching: None,
+            }];
+            spec.outputs = vec![
+                OutputPortSpec {
+                    id: "node_embeddings".to_string(),
+                    name: "Topological Node Embeddings".to_string(),
+                    space: TensorSpace::ContinuousVector {
+                        dimension: d_model,
+                        range: None,
+                    },
+                    symbolic_shape: vec![
+                        SymbolicDim::from("batch"),
+                        SymbolicDim::from("ast_nodes"),
+                        SymbolicDim::Known(d_model),
+                    ],
+                    constraint: StructuralConstraint::DirectLinear,
+                    loss: LossPairing::InfoNCEContrastive,
+                },
+                OutputPortSpec {
+                    id: "value_score".to_string(),
+                    name: "MCTS State Complexity Value".to_string(),
+                    space: TensorSpace::ContinuousVector {
+                        dimension: 1,
+                        range: Some((0.0, 1.0)),
+                    },
+                    symbolic_shape: vec![SymbolicDim::from("batch"), SymbolicDim::Known(1)],
+                    constraint: StructuralConstraint::DirectLinear,
+                    loss: LossPairing::MSE,
+                },
+            ];
+
+            let mut nodes = Vec::new();
+            nodes.push(NodeSpec {
+                id: "op_embed".to_string(),
+                name: "AST Operator & Variable Embedding".to_string(),
+                operator: OperatorKind::Embedding {
+                    num_embeddings: 1024,
+                    embedding_dim: d_model,
+                },
+                precision: Some(precision),
+                ..Default::default()
+            });
+            for i in 1..=depth {
+                nodes.push(NodeSpec {
+                    id: format!("tree_attn_{i}"),
+                    name: format!("Tree-Relative Self-Attention Block {i}"),
+                    operator: OperatorKind::MHA {
+                        num_heads: (d_model / 64).max(1),
+                        d_k: 64,
+                        d_v: 64,
+                        dropout: 0.0,
+                    },
+                    precision: Some(precision),
+                    ..Default::default()
+                });
+                nodes.push(NodeSpec {
+                    id: format!("dag_ffn_{i}"),
+                    name: format!("DAG Operator SwiGLU FFN {i}"),
+                    operator: OperatorKind::SwiGLU {
+                        in_features: d_model,
+                        hidden_features: d_model * 2,
+                    },
+                    precision: Some(precision),
+                    ..Default::default()
+                });
+            }
+            nodes.push(NodeSpec {
+                id: "ast_final_norm".to_string(),
+                name: "AST Final RMSNorm".to_string(),
+                operator: OperatorKind::RMSNorm {
+                    dim: d_model,
+                    eps: 1e-5,
+                },
+                precision: Some(precision),
+                ..Default::default()
+            });
+            nodes.push(NodeSpec {
+                id: "value_head".to_string(),
+                name: "MCTS Complexity Value Head".to_string(),
+                operator: OperatorKind::Linear {
+                    in_features: d_model,
+                    out_features: 1,
+                    bias: true,
                 },
                 precision: Some(PrecisionFormat::FP32),
                 ..Default::default()
