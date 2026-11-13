@@ -197,8 +197,7 @@ impl InspectorView {
                                 .color(Color32::from_rgb(110, 205, 255)),
                         );
                         ui.label(
-                            RichText::new(bi::ARROW_RIGHT)
-                                .color(Color32::from_rgb(130, 160, 200)),
+                            RichText::new(bi::ARROW_RIGHT).color(Color32::from_rgb(130, 160, 200)),
                         );
                         ui.label(
                             RichText::new(&out_str)
@@ -1656,7 +1655,11 @@ impl InspectorView {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(bi::DIAGRAM_3).color(Color32::from_rgb(100, 190, 255)));
-                    ui.label(RichText::new("Architecture Overview").strong().color(Color32::WHITE));
+                    ui.label(
+                        RichText::new("Architecture Overview")
+                            .strong()
+                            .color(Color32::WHITE),
+                    );
                 });
                 ui.add_space(4.0);
 
@@ -1668,10 +1671,12 @@ impl InspectorView {
                                 .color(Color32::from_rgb(150, 165, 185)),
                         );
                         ui.label(
-                            RichText::new(format!("{layer_count} ({in_count} in, {out_count} out)"))
-                                .size(11.5)
-                                .strong()
-                                .color(Color32::from_rgb(130, 215, 255)),
+                            RichText::new(format!(
+                                "{layer_count} ({in_count} in, {out_count} out)"
+                            ))
+                            .size(11.5)
+                            .strong()
+                            .color(Color32::from_rgb(130, 215, 255)),
                         );
                     });
                     cols[1].vertical(|ui| {

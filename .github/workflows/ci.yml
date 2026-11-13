@@ -182,7 +182,11 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@wasm-bindgen-cli
+      # The test runner must match the wasm-bindgen version in Cargo.lock.
+      - name: Install wasm-bindgen Test Runner (version from Cargo.lock)
+        run: |
+          WB_VERSION=$(cargo pkgid --quiet wasm-bindgen | sed 's/.*[@#]//')
+          cargo install wasm-bindgen-cli --version "$WB_VERSION" --locked
 
       - name: Determine Browser by Market Share (96% Chrome / 4% Firefox)
         id: select-browser
@@ -193,15 +197,18 @@ jobs:
           if [ "$ROLL" -le 96 ]; then
             echo "Selected: Headless Chromium / Chrome (96% tier)"
             echo "browser=chrome" >> $GITHUB_OUTPUT
-            echo "CHROMEDRIVER=chromedriver" >> $GITHUB_ENV
+            echo "CHROMEDRIVER=$CHROMEWEBDRIVER/chromedriver" >> $GITHUB_ENV
           else
             echo "Selected: Headless Firefox (4% tier)"
             echo "browser=firefox" >> $GITHUB_OUTPUT
-            echo "GECKODRIVER=geckodriver" >> $GITHUB_ENV
+            echo "GECKODRIVER=$GECKOWEBDRIVER/geckodriver" >> $GITHUB_ENV
           fi
 
       - name: Run WebAssembly Browser Tests
         shell: bash
+        env:
+          # Without a runner, cargo tries to execute the .wasm file directly.
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
         run: |
           echo "Executing WASM tests with browser: ${{ steps.select-browser.outputs.browser }}"
           WASM_BINDGEN_TEST_TIMEOUT=60 cargo test -p web --test wasm_tests --target wasm32-unknown-unknown

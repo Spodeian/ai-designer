@@ -6,7 +6,7 @@ use eframe::egui::{
     self, Color32, CornerRadius, Id, Pos2, Rect, RichText, Sense, Stroke, Ui, Vec2,
 };
 use eframe::epaint::CubicBezierShape;
-use shared::{advisor::AdvisorySeverity, PrecisionFormat, TensorSpace};
+use shared::{PrecisionFormat, TensorSpace, advisor::AdvisorySeverity};
 
 fn format_count(n: usize) -> String {
     if n >= 1_000_000_000 {
@@ -479,7 +479,10 @@ impl CanvasNodeView {
 
             let prec_x_offset = if has_shape_error || finding_count > 0 {
                 let (warn_txt, warn_col) = if has_shape_error {
-                    (bi::EXCLAMATION_TRIANGLE_FILL, Color32::from_rgb(255, 100, 100))
+                    (
+                        bi::EXCLAMATION_TRIANGLE_FILL,
+                        Color32::from_rgb(255, 100, 100),
+                    )
                 } else {
                     (bi::EXCLAMATION_TRIANGLE, Color32::from_rgb(255, 190, 60))
                 };
@@ -966,7 +969,7 @@ impl CanvasNodeView {
                     .on_hover_text("Center View on Selected Layer (Z)")
                     .clicked()
                 {
-                    state.center_on_node(&sel_id, rect.size());
+                    state.center_on_node(sel_id, rect.size());
                 }
                 if ui
                     .small_button(bi::ARROW_UP)

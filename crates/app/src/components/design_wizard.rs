@@ -1,7 +1,7 @@
 //! Architecture Design & Scaffolding Wizard: guided creation of AI models from scratch,
 //! interactive step-by-step model building, architecture archetypes, or industry blueprints.
 
-use crate::components::palette::{get_template_by_filename, TEMPLATES};
+use crate::components::palette::{TEMPLATES, get_template_by_filename};
 use crate::icons::bi;
 use crate::studio_state::{CanvasMode, StudioState};
 use eframe::egui::{self, Color32, CornerRadius, RichText, ScrollArea, Stroke, Ui, Vec2};
@@ -11,7 +11,7 @@ use shared::spec::{
     LossPairing, NodeSpec, NormPlacement, NormalizerSpec, OperatorKind, OutputPortSpec,
     PatchingSpec, StructuralConstraint, SymbolicDim, TensorSpace, WiringPattern,
 };
-use shared::{scaffold_archetype, ArchitectureArchetype, PrecisionFormat};
+use shared::{ArchitectureArchetype, PrecisionFormat, scaffold_archetype};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WizardTab {
@@ -130,12 +130,24 @@ impl ModalityChoice {
 
     pub fn description(&self) -> &'static str {
         match self {
-            Self::LanguageText => "Discrete token sequences parsed into continuous representations for autoregressive or masked modeling.",
-            Self::VisionImage => "High-dimensional RGB/multispectral image tensors decomposed via 2D patchification.",
-            Self::TimeSeries => "Temporal multivariate series stabilized with reversible instance normalization (RevIN).",
-            Self::Tabular => "Heterogeneous categorical and continuous numerical features mapped via quantile scalers.",
-            Self::ScientificPDE => "Infinite-dimensional function spaces on geometric meshes and spatial Fourier grids.",
-            Self::RoboticsAction => "Proprioceptive joint sensor states coupled with continuous multi-horizon action trajectories.",
+            Self::LanguageText => {
+                "Discrete token sequences parsed into continuous representations for autoregressive or masked modeling."
+            }
+            Self::VisionImage => {
+                "High-dimensional RGB/multispectral image tensors decomposed via 2D patchification."
+            }
+            Self::TimeSeries => {
+                "Temporal multivariate series stabilized with reversible instance normalization (RevIN)."
+            }
+            Self::Tabular => {
+                "Heterogeneous categorical and continuous numerical features mapped via quantile scalers."
+            }
+            Self::ScientificPDE => {
+                "Infinite-dimensional function spaces on geometric meshes and spatial Fourier grids."
+            }
+            Self::RoboticsAction => {
+                "Proprioceptive joint sensor states coupled with continuous multi-horizon action trajectories."
+            }
         }
     }
 }
@@ -209,12 +221,24 @@ impl BackboneOperatorChoice {
 
     pub fn hardware_note(&self) -> &'static str {
         match self {
-            Self::GQA => "Ideal for long-context LLMs: cuts KV-cache VRAM by 4x to 8x during generation.",
-            Self::MHA => "General-purpose attention: highest expressivity for symmetric bi-directional encoders.",
-            Self::MLA => "DeepSeek V2/V3 innovation: compresses KV states into a low-rank latent vector for ultra-compact VRAM.",
-            Self::MambaSSM => "O(N) linear time complexity in sequence length; ideal for edge and continuous streaming.",
-            Self::FourierOperator => "Zero discretization error across resolutions; designed for physics and PDE modeling.",
-            Self::ConvNeXtSpatial => "Strong 2D inductive bias; fast execution on standard tensor cores without quadratic cost.",
+            Self::GQA => {
+                "Ideal for long-context LLMs: cuts KV-cache VRAM by 4x to 8x during generation."
+            }
+            Self::MHA => {
+                "General-purpose attention: highest expressivity for symmetric bi-directional encoders."
+            }
+            Self::MLA => {
+                "DeepSeek V2/V3 innovation: compresses KV states into a low-rank latent vector for ultra-compact VRAM."
+            }
+            Self::MambaSSM => {
+                "O(N) linear time complexity in sequence length; ideal for edge and continuous streaming."
+            }
+            Self::FourierOperator => {
+                "Zero discretization error across resolutions; designed for physics and PDE modeling."
+            }
+            Self::ConvNeXtSpatial => {
+                "Strong 2D inductive bias; fast execution on standard tensor cores without quadratic cost."
+            }
         }
     }
 }
@@ -270,7 +294,9 @@ impl ResidualChoice {
         match self {
             Self::PreLNResidual => "Pre-LN Residual Highway (x + SubLayer(Norm(x)))",
             Self::PostLNResidual => "Post-LN Residual Highway (Norm(x + SubLayer(x)))",
-            Self::LayerScaleResidual => "LayerScale Pre-LN (Learnable diagonal scaling alpha = 1e-2)",
+            Self::LayerScaleResidual => {
+                "LayerScale Pre-LN (Learnable diagonal scaling alpha = 1e-2)"
+            }
             Self::ReversibleSplit => "Reversible Split-Stream (O(1) Activation Memory)",
             Self::RecurrentDepth => "Recurrent Depth Deliberation Loop (Adaptive PonderNet)",
         }
@@ -719,9 +745,9 @@ impl DesignWizardModal {
                     },
                     symbolic_shape: vec![SymbolicDim::from("batch"), SymbolicDim::from("seq_len")],
                     coordinate_encoding: match self.step_pos_enc {
-                        PosEncodingChoice::RoPE => {
-                            CoordinateEncoding::RoPE1D { base: self.rope_base }
-                        }
+                        PosEncodingChoice::RoPE => CoordinateEncoding::RoPE1D {
+                            base: self.rope_base,
+                        },
                         PosEncodingChoice::ALiBi => CoordinateEncoding::ALiBi,
                         PosEncodingChoice::Fourier2D => {
                             CoordinateEncoding::RoPE2D_Dynamic { base: 10000.0 }
@@ -768,7 +794,10 @@ impl DesignWizardModal {
                         SymbolicDim::Known(self.num_features),
                     ],
                     coordinate_encoding: CoordinateEncoding::None,
-                    normalizer: NormalizerSpec::RevIN { eps: 1e-5, affine: true },
+                    normalizer: NormalizerSpec::RevIN {
+                        eps: 1e-5,
+                        affine: true,
+                    },
                     patching: None,
                 }];
             }
@@ -803,7 +832,10 @@ impl DesignWizardModal {
                         SymbolicDim::from("grid_y"),
                         SymbolicDim::Known(self.num_features.max(1)),
                     ],
-                    coordinate_encoding: CoordinateEncoding::RandomFourierFeatures { num_features: 16, scale: 1.0 },
+                    coordinate_encoding: CoordinateEncoding::RandomFourierFeatures {
+                        num_features: 16,
+                        scale: 1.0,
+                    },
                     normalizer: NormalizerSpec::None,
                     patching: None,
                 }];
@@ -889,7 +921,10 @@ impl DesignWizardModal {
                         dimension: self.d_model,
                         range: None,
                     },
-                    symbolic_shape: vec![SymbolicDim::from("batch"), SymbolicDim::Known(self.d_model)],
+                    symbolic_shape: vec![
+                        SymbolicDim::from("batch"),
+                        SymbolicDim::Known(self.d_model),
+                    ],
                     constraint: StructuralConstraint::DirectLinear,
                     loss: LossPairing::MSE,
                 }];
@@ -1550,7 +1585,10 @@ impl DesignWizardModal {
                         if ui
                             .selectable_label(
                                 is_current,
-                                RichText::new(label_text).size(11.5).color(text_color).strong(),
+                                RichText::new(label_text)
+                                    .size(11.5)
+                                    .color(text_color)
+                                    .strong(),
                             )
                             .clicked()
                         {
@@ -1570,15 +1608,15 @@ impl DesignWizardModal {
                 ScrollArea::vertical()
                     .id_salt("step_controls_scroll")
                     .max_height(420.0)
-                    .show(ui, |ui| {
-                        match self.builder_step {
-                            BuilderStep::ModalityAndTask => self.render_step_modality(ui),
-                            BuilderStep::DimensionsAndIngress => self.render_step_ingress(ui),
-                            BuilderStep::BackboneCore => self.render_step_backbone(ui),
-                            BuilderStep::FeedForwardAndMoE => self.render_step_ffn(ui),
-                            BuilderStep::NormAndResidual => self.render_step_norm(ui),
-                            BuilderStep::EgressAndLoss => self.render_step_egress(ui),
-                            BuilderStep::HardwareAndReview => self.render_step_review(ui, should_create),
+                    .show(ui, |ui| match self.builder_step {
+                        BuilderStep::ModalityAndTask => self.render_step_modality(ui),
+                        BuilderStep::DimensionsAndIngress => self.render_step_ingress(ui),
+                        BuilderStep::BackboneCore => self.render_step_backbone(ui),
+                        BuilderStep::FeedForwardAndMoE => self.render_step_ffn(ui),
+                        BuilderStep::NormAndResidual => self.render_step_norm(ui),
+                        BuilderStep::EgressAndLoss => self.render_step_egress(ui),
+                        BuilderStep::HardwareAndReview => {
+                            self.render_step_review(ui, should_create)
                         }
                     });
 
@@ -1589,16 +1627,23 @@ impl DesignWizardModal {
                 ui.horizontal(|ui| {
                     let step_idx = self.builder_step.number();
                     if step_idx > 1 {
-                        if ui.button(format!("{} Previous Step", bi::ARROW_LEFT)).clicked() {
+                        if ui
+                            .button(format!("{} Previous Step", bi::ARROW_LEFT))
+                            .clicked()
+                        {
                             self.builder_step = BuilderStep::ALL[step_idx - 2];
                         }
                     }
                     if step_idx < BuilderStep::ALL.len() {
                         if ui
                             .button(
-                                RichText::new(format!("Next Step: {} {}", BuilderStep::ALL[step_idx].icon(), BuilderStep::ALL[step_idx].title()))
-                                    .color(Color32::from_rgb(110, 200, 255))
-                                    .strong(),
+                                RichText::new(format!(
+                                    "Next Step: {} {}",
+                                    BuilderStep::ALL[step_idx].icon(),
+                                    BuilderStep::ALL[step_idx].title()
+                                ))
+                                .color(Color32::from_rgb(110, 200, 255))
+                                .strong(),
                             )
                             .clicked()
                         {
@@ -1639,8 +1684,16 @@ impl DesignWizardModal {
             ModalityChoice::RoboticsAction,
         ] {
             let is_sel = self.step_modality == modality;
-            let bg = if is_sel { Color32::from_rgb(32, 48, 72) } else { Color32::from_rgb(22, 26, 36) };
-            let stroke = if is_sel { Color32::from_rgb(80, 160, 255) } else { Color32::from_rgb(45, 52, 68) };
+            let bg = if is_sel {
+                Color32::from_rgb(32, 48, 72)
+            } else {
+                Color32::from_rgb(22, 26, 36)
+            };
+            let stroke = if is_sel {
+                Color32::from_rgb(80, 160, 255)
+            } else {
+                Color32::from_rgb(45, 52, 68)
+            };
 
             egui::Frame::group(ui.style())
                 .fill(bg)
@@ -1649,7 +1702,11 @@ impl DesignWizardModal {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         if ui
-                            .selectable_label(is_sel, RichText::new(format!("{} {}", modality.icon(), modality.label())).strong())
+                            .selectable_label(
+                                is_sel,
+                                RichText::new(format!("{} {}", modality.icon(), modality.label()))
+                                    .strong(),
+                            )
                             .clicked()
                         {
                             self.step_modality = modality;
@@ -1667,12 +1724,14 @@ impl DesignWizardModal {
                                 }
                                 ModalityChoice::TimeSeries | ModalityChoice::Tabular => {
                                     self.step_task = TaskObjective::RegressionForecasting;
-                                    self.step_output_head = OutputHeadChoice::ContinuousRegressionHead;
+                                    self.step_output_head =
+                                        OutputHeadChoice::ContinuousRegressionHead;
                                     self.step_pos_enc = PosEncodingChoice::None;
                                 }
                                 ModalityChoice::ScientificPDE => {
                                     self.step_task = TaskObjective::RegressionForecasting;
-                                    self.step_output_head = OutputHeadChoice::ContinuousRegressionHead;
+                                    self.step_output_head =
+                                        OutputHeadChoice::ContinuousRegressionHead;
                                     self.step_backbone_op = BackboneOperatorChoice::FourierOperator;
                                     self.step_pos_enc = PosEncodingChoice::Fourier2D;
                                 }
@@ -1684,7 +1743,11 @@ impl DesignWizardModal {
                             }
                         }
                     });
-                    ui.label(RichText::new(modality.description()).size(11.0).color(Color32::from_rgb(170, 180, 195)));
+                    ui.label(
+                        RichText::new(modality.description())
+                            .size(11.0)
+                            .color(Color32::from_rgb(170, 180, 195)),
+                    );
                 });
             ui.add_space(4.0);
         }
@@ -1692,15 +1755,18 @@ impl DesignWizardModal {
         ui.add_space(10.0);
         ui.separator();
         ui.label(RichText::new("Model Identity & Naming:").strong());
-        egui::Grid::new("step1_naming_grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-            ui.label("Model Slug ID:");
-            ui.text_edit_singleline(&mut self.model_id);
-            ui.end_row();
+        egui::Grid::new("step1_naming_grid")
+            .num_columns(2)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                ui.label("Model Slug ID:");
+                ui.text_edit_singleline(&mut self.model_id);
+                ui.end_row();
 
-            ui.label("Display Name:");
-            ui.text_edit_singleline(&mut self.display_name);
-            ui.end_row();
-        });
+                ui.label("Display Name:");
+                ui.text_edit_singleline(&mut self.display_name);
+                ui.end_row();
+            });
 
         ui.add_space(10.0);
         ui.separator();
@@ -1741,91 +1807,162 @@ impl DesignWizardModal {
         );
         ui.add_space(8.0);
 
-        egui::Grid::new("step2_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-            ui.label("Hidden Latent Dimension (d_model):");
-            ui.horizontal(|ui| {
-                ui.add(egui::DragValue::new(&mut self.d_model).range(64..=8192).speed(32));
-                for &dim in &[128, 256, 512, 768, 1024, 2048] {
-                    if ui.selectable_label(self.d_model == dim, format!("{dim}")).clicked() {
-                        self.d_model = dim;
-                    }
-                }
-            });
-            ui.end_row();
-
-            match self.step_modality {
-                ModalityChoice::LanguageText => {
-                    ui.label("Vocabulary Size (Vocab Tokens):");
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.vocab_size).range(256..=256000).speed(500));
-                        for &v in &[32000, 50257, 128256] {
-                            if ui.selectable_label(self.vocab_size == v, format!("{v}")).clicked() {
-                                self.vocab_size = v;
-                            }
-                        }
-                    });
-                    ui.end_row();
-                }
-                ModalityChoice::VisionImage => {
-                    ui.label("Input Image Resolution (H x W):");
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.image_resolution).range(64..=2048).speed(32));
-                        for &res in &[128, 256, 512] {
-                            if ui.selectable_label(self.image_resolution == res, format!("{res}px")).clicked() {
-                                self.image_resolution = res;
-                            }
-                        }
-                    });
-                    ui.end_row();
-
-                    ui.label("Square Patch Dimension (P x P):");
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.patch_size).range(2..=64).speed(2));
-                        for &p in &[8, 14, 16] {
-                            if ui.selectable_label(self.patch_size == p, format!("{p}x{p}")).clicked() {
-                                self.patch_size = p;
-                            }
-                        }
-                    });
-                    ui.end_row();
-                }
-                ModalityChoice::TimeSeries | ModalityChoice::Tabular | ModalityChoice::ScientificPDE => {
-                    ui.label("Input Feature Dimensionality:");
-                    ui.add(egui::DragValue::new(&mut self.num_features).range(1..=4096).speed(1));
-                    ui.end_row();
-                }
-                ModalityChoice::RoboticsAction => {
-                    ui.label("Proprioceptive Sensor Dimension:");
-                    ui.add(egui::DragValue::new(&mut self.action_dim).range(1..=64).speed(1));
-                    ui.end_row();
-                }
-            }
-
-            ui.label("Coordinate & Positional Encoding:");
-            egui::ComboBox::from_id_salt("pos_enc_combo")
-                .selected_text(self.step_pos_enc.label())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.step_pos_enc, PosEncodingChoice::RoPE, PosEncodingChoice::RoPE.label());
-                    ui.selectable_value(&mut self.step_pos_enc, PosEncodingChoice::ALiBi, PosEncodingChoice::ALiBi.label());
-                    ui.selectable_value(&mut self.step_pos_enc, PosEncodingChoice::LearnedAbsolute, PosEncodingChoice::LearnedAbsolute.label());
-                    ui.selectable_value(&mut self.step_pos_enc, PosEncodingChoice::Fourier2D, PosEncodingChoice::Fourier2D.label());
-                    ui.selectable_value(&mut self.step_pos_enc, PosEncodingChoice::None, PosEncodingChoice::None.label());
-                });
-            ui.end_row();
-
-            if self.step_pos_enc == PosEncodingChoice::RoPE {
-                ui.label("RoPE Base Frequency (theta):");
+        egui::Grid::new("step2_grid")
+            .num_columns(2)
+            .spacing([16.0, 8.0])
+            .show(ui, |ui| {
+                ui.label("Hidden Latent Dimension (d_model):");
                 ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut self.rope_base).range(1000.0..=10000000.0).speed(1000.0));
-                    for &b in &[10000.0, 500000.0, 1000000.0] {
-                        if ui.selectable_label(self.rope_base == b, format!("{b:.0}")).clicked() {
-                            self.rope_base = b;
+                    ui.add(
+                        egui::DragValue::new(&mut self.d_model)
+                            .range(64..=8192)
+                            .speed(32),
+                    );
+                    for &dim in &[128, 256, 512, 768, 1024, 2048] {
+                        if ui
+                            .selectable_label(self.d_model == dim, format!("{dim}"))
+                            .clicked()
+                        {
+                            self.d_model = dim;
                         }
                     }
                 });
                 ui.end_row();
-            }
-        });
+
+                match self.step_modality {
+                    ModalityChoice::LanguageText => {
+                        ui.label("Vocabulary Size (Vocab Tokens):");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut self.vocab_size)
+                                    .range(256..=256000)
+                                    .speed(500),
+                            );
+                            for &v in &[32000, 50257, 128256] {
+                                if ui
+                                    .selectable_label(self.vocab_size == v, format!("{v}"))
+                                    .clicked()
+                                {
+                                    self.vocab_size = v;
+                                }
+                            }
+                        });
+                        ui.end_row();
+                    }
+                    ModalityChoice::VisionImage => {
+                        ui.label("Input Image Resolution (H x W):");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut self.image_resolution)
+                                    .range(64..=2048)
+                                    .speed(32),
+                            );
+                            for &res in &[128, 256, 512] {
+                                if ui
+                                    .selectable_label(
+                                        self.image_resolution == res,
+                                        format!("{res}px"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.image_resolution = res;
+                                }
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label("Square Patch Dimension (P x P):");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut self.patch_size)
+                                    .range(2..=64)
+                                    .speed(2),
+                            );
+                            for &p in &[8, 14, 16] {
+                                if ui
+                                    .selectable_label(self.patch_size == p, format!("{p}x{p}"))
+                                    .clicked()
+                                {
+                                    self.patch_size = p;
+                                }
+                            }
+                        });
+                        ui.end_row();
+                    }
+                    ModalityChoice::TimeSeries
+                    | ModalityChoice::Tabular
+                    | ModalityChoice::ScientificPDE => {
+                        ui.label("Input Feature Dimensionality:");
+                        ui.add(
+                            egui::DragValue::new(&mut self.num_features)
+                                .range(1..=4096)
+                                .speed(1),
+                        );
+                        ui.end_row();
+                    }
+                    ModalityChoice::RoboticsAction => {
+                        ui.label("Proprioceptive Sensor Dimension:");
+                        ui.add(
+                            egui::DragValue::new(&mut self.action_dim)
+                                .range(1..=64)
+                                .speed(1),
+                        );
+                        ui.end_row();
+                    }
+                }
+
+                ui.label("Coordinate & Positional Encoding:");
+                egui::ComboBox::from_id_salt("pos_enc_combo")
+                    .selected_text(self.step_pos_enc.label())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.step_pos_enc,
+                            PosEncodingChoice::RoPE,
+                            PosEncodingChoice::RoPE.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_pos_enc,
+                            PosEncodingChoice::ALiBi,
+                            PosEncodingChoice::ALiBi.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_pos_enc,
+                            PosEncodingChoice::LearnedAbsolute,
+                            PosEncodingChoice::LearnedAbsolute.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_pos_enc,
+                            PosEncodingChoice::Fourier2D,
+                            PosEncodingChoice::Fourier2D.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_pos_enc,
+                            PosEncodingChoice::None,
+                            PosEncodingChoice::None.label(),
+                        );
+                    });
+                ui.end_row();
+
+                if self.step_pos_enc == PosEncodingChoice::RoPE {
+                    ui.label("RoPE Base Frequency (theta):");
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut self.rope_base)
+                                .range(1000.0..=10000000.0)
+                                .speed(1000.0),
+                        );
+                        for &b in &[10000.0, 500000.0, 1000000.0] {
+                            if ui
+                                .selectable_label(self.rope_base == b, format!("{b:.0}"))
+                                .clicked()
+                            {
+                                self.rope_base = b;
+                            }
+                        }
+                    });
+                    ui.end_row();
+                }
+            });
     }
 
     fn render_step_backbone(&mut self, ui: &mut Ui) {
@@ -1851,8 +1988,16 @@ impl DesignWizardModal {
             BackboneOperatorChoice::ConvNeXtSpatial,
         ] {
             let is_sel = self.step_backbone_op == op;
-            let bg = if is_sel { Color32::from_rgb(32, 48, 72) } else { Color32::from_rgb(22, 26, 36) };
-            let stroke = if is_sel { Color32::from_rgb(80, 160, 255) } else { Color32::from_rgb(45, 52, 68) };
+            let bg = if is_sel {
+                Color32::from_rgb(32, 48, 72)
+            } else {
+                Color32::from_rgb(22, 26, 36)
+            };
+            let stroke = if is_sel {
+                Color32::from_rgb(80, 160, 255)
+            } else {
+                Color32::from_rgb(45, 52, 68)
+            };
 
             egui::Frame::group(ui.style())
                 .fill(bg)
@@ -1860,11 +2005,18 @@ impl DesignWizardModal {
                 .corner_radius(CornerRadius::same(6))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        if ui.selectable_label(is_sel, RichText::new(op.label()).strong()).clicked() {
+                        if ui
+                            .selectable_label(is_sel, RichText::new(op.label()).strong())
+                            .clicked()
+                        {
                             self.step_backbone_op = op;
                         }
                     });
-                    ui.label(RichText::new(op.hardware_note()).size(11.0).color(Color32::from_rgb(165, 195, 230)));
+                    ui.label(
+                        RichText::new(op.hardware_note())
+                            .size(11.0)
+                            .color(Color32::from_rgb(165, 195, 230)),
+                    );
                 });
             ui.add_space(4.0);
         }
@@ -1873,41 +2025,74 @@ impl DesignWizardModal {
         ui.separator();
         ui.label(RichText::new("Operator Hyperparameters:").strong());
 
-        egui::Grid::new("step3_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-            match self.step_backbone_op {
+        egui::Grid::new("step3_grid")
+            .num_columns(2)
+            .spacing([16.0, 8.0])
+            .show(ui, |ui| match self.step_backbone_op {
                 BackboneOperatorChoice::GQA => {
                     ui.label("Query Heads (num_q_heads):");
-                    ui.add(egui::DragValue::new(&mut self.num_heads).range(1..=64).speed(1));
+                    ui.add(
+                        egui::DragValue::new(&mut self.num_heads)
+                            .range(1..=64)
+                            .speed(1),
+                    );
                     ui.end_row();
 
                     ui.label("Key/Value Heads (num_kv_heads):");
                     ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.num_kv_heads).range(1..=32).speed(1));
-                        ui.label(format!("(Compression ratio: {}:1)", self.num_heads / self.num_kv_heads.max(1)));
+                        ui.add(
+                            egui::DragValue::new(&mut self.num_kv_heads)
+                                .range(1..=32)
+                                .speed(1),
+                        );
+                        ui.label(format!(
+                            "(Compression ratio: {}:1)",
+                            self.num_heads / self.num_kv_heads.max(1)
+                        ));
                     });
                     ui.end_row();
 
                     ui.label("Head Dimension (d_k):");
-                    ui.add(egui::DragValue::new(&mut self.d_k).range(16..=256).speed(16));
+                    ui.add(
+                        egui::DragValue::new(&mut self.d_k)
+                            .range(16..=256)
+                            .speed(16),
+                    );
                     ui.end_row();
                 }
                 BackboneOperatorChoice::MHA => {
                     ui.label("Attention Heads (num_heads):");
-                    ui.add(egui::DragValue::new(&mut self.num_heads).range(1..=64).speed(1));
+                    ui.add(
+                        egui::DragValue::new(&mut self.num_heads)
+                            .range(1..=64)
+                            .speed(1),
+                    );
                     ui.end_row();
 
                     ui.label("Head Dimension (d_k):");
-                    ui.add(egui::DragValue::new(&mut self.d_k).range(16..=256).speed(16));
+                    ui.add(
+                        egui::DragValue::new(&mut self.d_k)
+                            .range(16..=256)
+                            .speed(16),
+                    );
                     ui.end_row();
                 }
                 BackboneOperatorChoice::MLA => {
                     ui.label("Attention Heads (num_heads):");
-                    ui.add(egui::DragValue::new(&mut self.num_heads).range(1..=64).speed(1));
+                    ui.add(
+                        egui::DragValue::new(&mut self.num_heads)
+                            .range(1..=64)
+                            .speed(1),
+                    );
                     ui.end_row();
 
                     ui.label("Latent KV Dimension (d_latent_kv):");
                     ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.d_latent_kv).range(32..=1024).speed(32));
+                        ui.add(
+                            egui::DragValue::new(&mut self.d_latent_kv)
+                                .range(32..=1024)
+                                .speed(32),
+                        );
                         ui.label("(DeepSeek low-rank KV compression bottleneck)");
                     });
                     ui.end_row();
@@ -1915,14 +2100,17 @@ impl DesignWizardModal {
                 BackboneOperatorChoice::MambaSSM => {
                     ui.label("SSM State Dimension (d_state):");
                     ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut self.ssm_d_state).range(8..=256).speed(8));
+                        ui.add(
+                            egui::DragValue::new(&mut self.ssm_d_state)
+                                .range(8..=256)
+                                .speed(8),
+                        );
                         ui.label("(Controls linear recurrent capacity)");
                     });
                     ui.end_row();
                 }
                 _ => {}
-            }
-        });
+            });
     }
 
     fn render_step_ffn(&mut self, ui: &mut Ui) {
@@ -1939,17 +2127,32 @@ impl DesignWizardModal {
         );
         ui.add_space(8.0);
 
-        for &ffn in &[FfnChoice::DenseSwiGLU, FfnChoice::DenseGELU, FfnChoice::SparseMoE] {
+        for &ffn in &[
+            FfnChoice::DenseSwiGLU,
+            FfnChoice::DenseGELU,
+            FfnChoice::SparseMoE,
+        ] {
             let is_sel = self.step_ffn == ffn;
-            let bg = if is_sel { Color32::from_rgb(32, 48, 72) } else { Color32::from_rgb(22, 26, 36) };
-            let stroke = if is_sel { Color32::from_rgb(80, 160, 255) } else { Color32::from_rgb(45, 52, 68) };
+            let bg = if is_sel {
+                Color32::from_rgb(32, 48, 72)
+            } else {
+                Color32::from_rgb(22, 26, 36)
+            };
+            let stroke = if is_sel {
+                Color32::from_rgb(80, 160, 255)
+            } else {
+                Color32::from_rgb(45, 52, 68)
+            };
 
             egui::Frame::group(ui.style())
                 .fill(bg)
                 .stroke(Stroke::new(if is_sel { 1.5 } else { 1.0 }, stroke))
                 .corner_radius(CornerRadius::same(6))
                 .show(ui, |ui| {
-                    if ui.selectable_label(is_sel, RichText::new(ffn.label()).strong()).clicked() {
+                    if ui
+                        .selectable_label(is_sel, RichText::new(ffn.label()).strong())
+                        .clicked()
+                    {
                         self.step_ffn = ffn;
                     }
                 });
@@ -1958,29 +2161,48 @@ impl DesignWizardModal {
 
         ui.add_space(8.0);
         ui.separator();
-        egui::Grid::new("step4_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-            ui.label("FFN Hidden Expansion Ratio:");
-            ui.horizontal(|ui| {
-                ui.add(egui::DragValue::new(&mut self.ffn_expansion).range(1.0..=8.0).speed(0.1));
-                let hidden_dim = ((self.d_model as f32) * self.ffn_expansion) as usize;
-                ui.label(format!("(Intermediate width: {hidden_dim} channels)"));
+        egui::Grid::new("step4_grid")
+            .num_columns(2)
+            .spacing([16.0, 8.0])
+            .show(ui, |ui| {
+                ui.label("FFN Hidden Expansion Ratio:");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut self.ffn_expansion)
+                            .range(1.0..=8.0)
+                            .speed(0.1),
+                    );
+                    let hidden_dim = ((self.d_model as f32) * self.ffn_expansion) as usize;
+                    ui.label(format!("(Intermediate width: {hidden_dim} channels)"));
+                });
+                ui.end_row();
+
+                if self.step_ffn == FfnChoice::SparseMoE {
+                    ui.label("Total Expert Networks (total_experts):");
+                    ui.add(
+                        egui::DragValue::new(&mut self.moe_num_experts)
+                            .range(2..=256)
+                            .speed(2),
+                    );
+                    ui.end_row();
+
+                    ui.label("Active Routed Experts (top_k):");
+                    ui.add(
+                        egui::DragValue::new(&mut self.moe_routed_k)
+                            .range(1..=16)
+                            .speed(1),
+                    );
+                    ui.end_row();
+
+                    ui.label("Shared Experts (always active):");
+                    ui.add(
+                        egui::DragValue::new(&mut self.moe_shared_experts)
+                            .range(0..=4)
+                            .speed(1),
+                    );
+                    ui.end_row();
+                }
             });
-            ui.end_row();
-
-            if self.step_ffn == FfnChoice::SparseMoE {
-                ui.label("Total Expert Networks (total_experts):");
-                ui.add(egui::DragValue::new(&mut self.moe_num_experts).range(2..=256).speed(2));
-                ui.end_row();
-
-                ui.label("Active Routed Experts (top_k):");
-                ui.add(egui::DragValue::new(&mut self.moe_routed_k).range(1..=16).speed(1));
-                ui.end_row();
-
-                ui.label("Shared Experts (always active):");
-                ui.add(egui::DragValue::new(&mut self.moe_shared_experts).range(0..=4).speed(1));
-                ui.end_row();
-            }
-        });
     }
 
     fn render_step_norm(&mut self, ui: &mut Ui) {
@@ -1997,40 +2219,78 @@ impl DesignWizardModal {
         );
         ui.add_space(8.0);
 
-        egui::Grid::new("step5_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-            ui.label("Stack Depth (Number of Backbone Blocks):");
-            ui.horizontal(|ui| {
-                ui.add(egui::DragValue::new(&mut self.depth).range(1..=64).speed(1));
-                for &d in &[2, 4, 6, 8, 12, 16, 24, 32] {
-                    if ui.selectable_label(self.depth == d, format!("{d}x")).clicked() {
-                        self.depth = d;
+        egui::Grid::new("step5_grid")
+            .num_columns(2)
+            .spacing([16.0, 8.0])
+            .show(ui, |ui| {
+                ui.label("Stack Depth (Number of Backbone Blocks):");
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut self.depth).range(1..=64).speed(1));
+                    for &d in &[2, 4, 6, 8, 12, 16, 24, 32] {
+                        if ui
+                            .selectable_label(self.depth == d, format!("{d}x"))
+                            .clicked()
+                        {
+                            self.depth = d;
+                        }
                     }
-                }
+                });
+                ui.end_row();
+
+                ui.label("Layer Normalization Primitive:");
+                egui::ComboBox::from_id_salt("norm_choice_combo")
+                    .selected_text(self.step_norm.label())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.step_norm,
+                            NormChoice::RMSNorm,
+                            NormChoice::RMSNorm.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_norm,
+                            NormChoice::LayerNorm,
+                            NormChoice::LayerNorm.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_norm,
+                            NormChoice::GroupNorm,
+                            NormChoice::GroupNorm.label(),
+                        );
+                    });
+                ui.end_row();
+
+                ui.label("Residual Highway Wiring Topology:");
+                egui::ComboBox::from_id_salt("residual_choice_combo")
+                    .selected_text(self.step_residual.label())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.step_residual,
+                            ResidualChoice::PreLNResidual,
+                            ResidualChoice::PreLNResidual.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_residual,
+                            ResidualChoice::PostLNResidual,
+                            ResidualChoice::PostLNResidual.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_residual,
+                            ResidualChoice::LayerScaleResidual,
+                            ResidualChoice::LayerScaleResidual.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_residual,
+                            ResidualChoice::ReversibleSplit,
+                            ResidualChoice::ReversibleSplit.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_residual,
+                            ResidualChoice::RecurrentDepth,
+                            ResidualChoice::RecurrentDepth.label(),
+                        );
+                    });
+                ui.end_row();
             });
-            ui.end_row();
-
-            ui.label("Layer Normalization Primitive:");
-            egui::ComboBox::from_id_salt("norm_choice_combo")
-                .selected_text(self.step_norm.label())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.step_norm, NormChoice::RMSNorm, NormChoice::RMSNorm.label());
-                    ui.selectable_value(&mut self.step_norm, NormChoice::LayerNorm, NormChoice::LayerNorm.label());
-                    ui.selectable_value(&mut self.step_norm, NormChoice::GroupNorm, NormChoice::GroupNorm.label());
-                });
-            ui.end_row();
-
-            ui.label("Residual Highway Wiring Topology:");
-            egui::ComboBox::from_id_salt("residual_choice_combo")
-                .selected_text(self.step_residual.label())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.step_residual, ResidualChoice::PreLNResidual, ResidualChoice::PreLNResidual.label());
-                    ui.selectable_value(&mut self.step_residual, ResidualChoice::PostLNResidual, ResidualChoice::PostLNResidual.label());
-                    ui.selectable_value(&mut self.step_residual, ResidualChoice::LayerScaleResidual, ResidualChoice::LayerScaleResidual.label());
-                    ui.selectable_value(&mut self.step_residual, ResidualChoice::ReversibleSplit, ResidualChoice::ReversibleSplit.label());
-                    ui.selectable_value(&mut self.step_residual, ResidualChoice::RecurrentDepth, ResidualChoice::RecurrentDepth.label());
-                });
-            ui.end_row();
-        });
     }
 
     fn render_step_egress(&mut self, ui: &mut Ui) {
@@ -2047,53 +2307,111 @@ impl DesignWizardModal {
         );
         ui.add_space(8.0);
 
-        egui::Grid::new("step6_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-            ui.label("Task Output Head Format:");
-            egui::ComboBox::from_id_salt("head_combo")
-                .selected_text(self.step_output_head.label())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.step_output_head, OutputHeadChoice::LanguageModelHead, OutputHeadChoice::LanguageModelHead.label());
-                    ui.selectable_value(&mut self.step_output_head, OutputHeadChoice::ClassificationHead, OutputHeadChoice::ClassificationHead.label());
-                    ui.selectable_value(&mut self.step_output_head, OutputHeadChoice::ContinuousRegressionHead, OutputHeadChoice::ContinuousRegressionHead.label());
-                    ui.selectable_value(&mut self.step_output_head, OutputHeadChoice::DiffusionNoiseHead, OutputHeadChoice::DiffusionNoiseHead.label());
-                    ui.selectable_value(&mut self.step_output_head, OutputHeadChoice::RoboticsActionHead, OutputHeadChoice::RoboticsActionHead.label());
-                });
-            ui.end_row();
-
-            if self.step_output_head == OutputHeadChoice::LanguageModelHead {
-                ui.label("Weight Tying with Input Embedding:");
-                ui.checkbox(&mut self.tie_word_embeddings, "Share W_in and W_out weights (saves VRAM)");
+        egui::Grid::new("step6_grid")
+            .num_columns(2)
+            .spacing([16.0, 8.0])
+            .show(ui, |ui| {
+                ui.label("Task Output Head Format:");
+                egui::ComboBox::from_id_salt("head_combo")
+                    .selected_text(self.step_output_head.label())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.step_output_head,
+                            OutputHeadChoice::LanguageModelHead,
+                            OutputHeadChoice::LanguageModelHead.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_output_head,
+                            OutputHeadChoice::ClassificationHead,
+                            OutputHeadChoice::ClassificationHead.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_output_head,
+                            OutputHeadChoice::ContinuousRegressionHead,
+                            OutputHeadChoice::ContinuousRegressionHead.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_output_head,
+                            OutputHeadChoice::DiffusionNoiseHead,
+                            OutputHeadChoice::DiffusionNoiseHead.label(),
+                        );
+                        ui.selectable_value(
+                            &mut self.step_output_head,
+                            OutputHeadChoice::RoboticsActionHead,
+                            OutputHeadChoice::RoboticsActionHead.label(),
+                        );
+                    });
                 ui.end_row();
-            }
 
-            if self.step_output_head == OutputHeadChoice::ClassificationHead {
-                ui.label("Target Category Count:");
-                ui.add(egui::DragValue::new(&mut self.num_classes).range(2..=100000).speed(10));
+                if self.step_output_head == OutputHeadChoice::LanguageModelHead {
+                    ui.label("Weight Tying with Input Embedding:");
+                    ui.checkbox(
+                        &mut self.tie_word_embeddings,
+                        "Share W_in and W_out weights (saves VRAM)",
+                    );
+                    ui.end_row();
+                }
+
+                if self.step_output_head == OutputHeadChoice::ClassificationHead {
+                    ui.label("Target Category Count:");
+                    ui.add(
+                        egui::DragValue::new(&mut self.num_classes)
+                            .range(2..=100000)
+                            .speed(10),
+                    );
+                    ui.end_row();
+                }
+
+                if self.step_output_head == OutputHeadChoice::RoboticsActionHead {
+                    ui.label("Action Prediction Horizon (Steps):");
+                    ui.add(
+                        egui::DragValue::new(&mut self.action_horizon)
+                            .range(1..=128)
+                            .speed(1),
+                    );
+                    ui.end_row();
+
+                    ui.label("Action Vector Degrees of Freedom:");
+                    ui.add(
+                        egui::DragValue::new(&mut self.action_dim)
+                            .range(1..=32)
+                            .speed(1),
+                    );
+                    ui.end_row();
+                }
+
+                ui.label("Loss Function Pairing:");
+                egui::ComboBox::from_id_salt("loss_combo")
+                    .selected_text(format!("{:?}", self.loss_choice))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.loss_choice,
+                            LossPairing::CrossEntropy,
+                            "Cross-Entropy (Categorical)",
+                        );
+                        ui.selectable_value(
+                            &mut self.loss_choice,
+                            LossPairing::MSE,
+                            "Mean Squared Error (L2)",
+                        );
+                        ui.selectable_value(
+                            &mut self.loss_choice,
+                            LossPairing::SmoothL1,
+                            "Smooth L1 / Huber",
+                        );
+                        ui.selectable_value(
+                            &mut self.loss_choice,
+                            LossPairing::Focal,
+                            "Focal Loss (Class Imbalance)",
+                        );
+                        ui.selectable_value(
+                            &mut self.loss_choice,
+                            LossPairing::OptimalTransportConditionalFlowMatching,
+                            "OT-CFM (Flow Matching)",
+                        );
+                    });
                 ui.end_row();
-            }
-
-            if self.step_output_head == OutputHeadChoice::RoboticsActionHead {
-                ui.label("Action Prediction Horizon (Steps):");
-                ui.add(egui::DragValue::new(&mut self.action_horizon).range(1..=128).speed(1));
-                ui.end_row();
-
-                ui.label("Action Vector Degrees of Freedom:");
-                ui.add(egui::DragValue::new(&mut self.action_dim).range(1..=32).speed(1));
-                ui.end_row();
-            }
-
-            ui.label("Loss Function Pairing:");
-            egui::ComboBox::from_id_salt("loss_combo")
-                .selected_text(format!("{:?}", self.loss_choice))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.loss_choice, LossPairing::CrossEntropy, "Cross-Entropy (Categorical)");
-                    ui.selectable_value(&mut self.loss_choice, LossPairing::MSE, "Mean Squared Error (L2)");
-                    ui.selectable_value(&mut self.loss_choice, LossPairing::SmoothL1, "Smooth L1 / Huber");
-                    ui.selectable_value(&mut self.loss_choice, LossPairing::Focal, "Focal Loss (Class Imbalance)");
-                    ui.selectable_value(&mut self.loss_choice, LossPairing::OptimalTransportConditionalFlowMatching, "OT-CFM (Flow Matching)");
-                });
-            ui.end_row();
-        });
+            });
     }
 
     fn render_step_review(&mut self, ui: &mut Ui, should_create: &mut bool) {
@@ -2110,35 +2428,76 @@ impl DesignWizardModal {
         );
         ui.add_space(8.0);
 
-        egui::Grid::new("step7_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-            ui.label("Target Hardware Deployment Profile:");
-            egui::ComboBox::from_id_salt("hw_profile_combo")
-                .selected_text(&self.target_hardware.profile_name)
-                .show_ui(ui, |ui| {
-                    if ui.selectable_label(self.target_hardware.profile_name.contains("RTX4090"), "Consumer Workstation (RTX 4090 24GB)").clicked() {
-                        self.target_hardware = HardwareTargetProfile::rtx_4090();
-                    }
-                    if ui.selectable_label(self.target_hardware.profile_name.contains("H100"), "Data Center Accelerator (NVIDIA H100 SXM 80GB)").clicked() {
-                        self.target_hardware = HardwareTargetProfile::datacenter_h100();
-                    }
-                    if ui.selectable_label(self.target_hardware.profile_name.contains("Jetson"), "Edge Robotics (Jetson Orin 8GB)").clicked() {
-                        self.target_hardware = HardwareTargetProfile::jetson_orin();
-                    }
-                });
-            ui.end_row();
+        egui::Grid::new("step7_grid")
+            .num_columns(2)
+            .spacing([16.0, 8.0])
+            .show(ui, |ui| {
+                ui.label("Target Hardware Deployment Profile:");
+                egui::ComboBox::from_id_salt("hw_profile_combo")
+                    .selected_text(&self.target_hardware.profile_name)
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(
+                                self.target_hardware.profile_name.contains("RTX4090"),
+                                "Consumer Workstation (RTX 4090 24GB)",
+                            )
+                            .clicked()
+                        {
+                            self.target_hardware = HardwareTargetProfile::rtx_4090();
+                        }
+                        if ui
+                            .selectable_label(
+                                self.target_hardware.profile_name.contains("H100"),
+                                "Data Center Accelerator (NVIDIA H100 SXM 80GB)",
+                            )
+                            .clicked()
+                        {
+                            self.target_hardware = HardwareTargetProfile::datacenter_h100();
+                        }
+                        if ui
+                            .selectable_label(
+                                self.target_hardware.profile_name.contains("Jetson"),
+                                "Edge Robotics (Jetson Orin 8GB)",
+                            )
+                            .clicked()
+                        {
+                            self.target_hardware = HardwareTargetProfile::jetson_orin();
+                        }
+                    });
+                ui.end_row();
 
-            ui.label("Model Execution Precision:");
-            egui::ComboBox::from_id_salt("step_precision_combo")
-                .selected_text(format!("{:?}", self.precision))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.precision, PrecisionFormat::BF16, "BF16 (16-bit Brain Float - Standard)");
-                    ui.selectable_value(&mut self.precision, PrecisionFormat::FP16, "FP16 (16-bit Float)");
-                    ui.selectable_value(&mut self.precision, PrecisionFormat::FP8E4M3FN, "FP8 E4M3FN (8-bit Quantized)");
-                    ui.selectable_value(&mut self.precision, PrecisionFormat::BitNet158b, "BitNet 1.58b (Ternary {-1,0,+1})");
-                    ui.selectable_value(&mut self.precision, PrecisionFormat::FP32, "FP32 (32-bit Single Precision)");
-                });
-            ui.end_row();
-        });
+                ui.label("Model Execution Precision:");
+                egui::ComboBox::from_id_salt("step_precision_combo")
+                    .selected_text(format!("{:?}", self.precision))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.precision,
+                            PrecisionFormat::BF16,
+                            "BF16 (16-bit Brain Float - Standard)",
+                        );
+                        ui.selectable_value(
+                            &mut self.precision,
+                            PrecisionFormat::FP16,
+                            "FP16 (16-bit Float)",
+                        );
+                        ui.selectable_value(
+                            &mut self.precision,
+                            PrecisionFormat::FP8E4M3FN,
+                            "FP8 E4M3FN (8-bit Quantized)",
+                        );
+                        ui.selectable_value(
+                            &mut self.precision,
+                            PrecisionFormat::BitNet158b,
+                            "BitNet 1.58b (Ternary {-1,0,+1})",
+                        );
+                        ui.selectable_value(
+                            &mut self.precision,
+                            PrecisionFormat::FP32,
+                            "FP32 (32-bit Single Precision)",
+                        );
+                    });
+                ui.end_row();
+            });
 
         ui.add_space(14.0);
         egui::Frame::group(ui.style())
@@ -2176,7 +2535,12 @@ impl DesignWizardModal {
             .corner_radius(CornerRadius::same(6))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{} Live Architecture Telemetry", bi::ACTIVITY)).size(13.0).strong().color(Color32::from_rgb(120, 195, 255)));
+                    ui.label(
+                        RichText::new(format!("{} Live Architecture Telemetry", bi::ACTIVITY))
+                            .size(13.0)
+                            .strong()
+                            .color(Color32::from_rgb(120, 195, 255)),
+                    );
                 });
                 ui.separator();
 
@@ -2192,16 +2556,28 @@ impl DesignWizardModal {
                         } else {
                             format!("{:.1}K", (params as f64) / 1e3)
                         };
-                        ui.label(RichText::new(param_str).color(Color32::from_rgb(120, 240, 160)).strong());
+                        ui.label(
+                            RichText::new(param_str)
+                                .color(Color32::from_rgb(120, 240, 160))
+                                .strong(),
+                        );
                         ui.end_row();
 
                         ui.label("Est. Weight Footprint:");
-                        ui.label(RichText::new(format!("{memory_mb:.1} MB ({:?})", self.precision)).color(Color32::from_rgb(240, 210, 120)).strong());
+                        ui.label(
+                            RichText::new(format!("{memory_mb:.1} MB ({:?})", self.precision))
+                                .color(Color32::from_rgb(240, 210, 120))
+                                .strong(),
+                        );
                         ui.end_row();
 
                         if kv_kb > 0.0 {
                             ui.label("KV-Cache / Token:");
-                            ui.label(RichText::new(format!("{kv_kb:.1} KB")).color(Color32::from_rgb(150, 210, 255)).strong());
+                            ui.label(
+                                RichText::new(format!("{kv_kb:.1} KB"))
+                                    .color(Color32::from_rgb(150, 210, 255))
+                                    .strong(),
+                            );
                             ui.end_row();
                         }
 
@@ -2210,35 +2586,95 @@ impl DesignWizardModal {
                         ui.end_row();
 
                         ui.label("Target Device:");
-                        ui.label(RichText::new(&self.target_hardware.profile_name).size(11.0).monospace());
+                        ui.label(
+                            RichText::new(&self.target_hardware.profile_name)
+                                .size(11.0)
+                                .monospace(),
+                        );
                         ui.end_row();
                     });
 
                 ui.add_space(8.0);
                 ui.separator();
-                ui.label(RichText::new("Layer Pipeline Trace:").size(12.0).strong().color(Color32::from_rgb(190, 205, 225)));
+                ui.label(
+                    RichText::new("Layer Pipeline Trace:")
+                        .size(12.0)
+                        .strong()
+                        .color(Color32::from_rgb(190, 205, 225)),
+                );
 
                 ScrollArea::vertical()
                     .id_salt("layer_trace_scroll")
                     .max_height(200.0)
                     .show(ui, |ui| {
-                        ui.label(RichText::new(format!("Input [{}]", self.step_modality.label())).size(11.0).color(Color32::from_rgb(130, 220, 160)));
+                        ui.label(
+                            RichText::new(format!("Input [{}]", self.step_modality.label()))
+                                .size(11.0)
+                                .color(Color32::from_rgb(130, 220, 160)),
+                        );
                         ui.label(RichText::new("  |").size(10.0).color(Color32::GRAY));
-                        ui.label(RichText::new(format!("  v [d_model = {}]", self.d_model)).size(10.5).color(Color32::from_rgb(140, 180, 220)));
+                        ui.label(
+                            RichText::new(format!("  v [d_model = {}]", self.d_model))
+                                .size(10.5)
+                                .color(Color32::from_rgb(140, 180, 220)),
+                        );
                         ui.label(RichText::new("  |").size(10.0).color(Color32::GRAY));
 
-                        ui.label(RichText::new(format!("  Backbone Block (x{} depth):", self.depth)).size(11.0).strong().color(Color32::from_rgb(220, 190, 110)));
-                        ui.label(RichText::new(format!("    ├── Norm: {:?}", self.step_norm)).size(10.5).color(Color32::from_rgb(170, 180, 195)));
-                        ui.label(RichText::new(format!("    ├── Core: {}", self.step_backbone_op.label())).size(10.5).color(Color32::from_rgb(170, 180, 195)));
-                        ui.label(RichText::new(format!("    ├── Residual: {:?}", self.step_residual)).size(10.5).color(Color32::from_rgb(140, 170, 200)));
-                        ui.label(RichText::new(format!("    ├── Norm: {:?}", self.step_norm)).size(10.5).color(Color32::from_rgb(170, 180, 195)));
-                        ui.label(RichText::new(format!("    └── FFN: {}", self.step_ffn.label())).size(10.5).color(Color32::from_rgb(170, 180, 195)));
+                        ui.label(
+                            RichText::new(format!("  Backbone Block (x{} depth):", self.depth))
+                                .size(11.0)
+                                .strong()
+                                .color(Color32::from_rgb(220, 190, 110)),
+                        );
+                        ui.label(
+                            RichText::new(format!("    ├── Norm: {:?}", self.step_norm))
+                                .size(10.5)
+                                .color(Color32::from_rgb(170, 180, 195)),
+                        );
+                        ui.label(
+                            RichText::new(format!(
+                                "    ├── Core: {}",
+                                self.step_backbone_op.label()
+                            ))
+                            .size(10.5)
+                            .color(Color32::from_rgb(170, 180, 195)),
+                        );
+                        ui.label(
+                            RichText::new(format!("    ├── Residual: {:?}", self.step_residual))
+                                .size(10.5)
+                                .color(Color32::from_rgb(140, 170, 200)),
+                        );
+                        ui.label(
+                            RichText::new(format!("    ├── Norm: {:?}", self.step_norm))
+                                .size(10.5)
+                                .color(Color32::from_rgb(170, 180, 195)),
+                        );
+                        ui.label(
+                            RichText::new(format!("    └── FFN: {}", self.step_ffn.label()))
+                                .size(10.5)
+                                .color(Color32::from_rgb(170, 180, 195)),
+                        );
 
                         ui.label(RichText::new("  |").size(10.0).color(Color32::GRAY));
-                        ui.label(RichText::new(format!("Final Norm: {:?}", self.step_norm)).size(10.5).color(Color32::from_rgb(170, 180, 195)));
+                        ui.label(
+                            RichText::new(format!("Final Norm: {:?}", self.step_norm))
+                                .size(10.5)
+                                .color(Color32::from_rgb(170, 180, 195)),
+                        );
                         ui.label(RichText::new("  |").size(10.0).color(Color32::GRAY));
-                        ui.label(RichText::new(format!("Output Readout: {}", self.step_output_head.label())).size(11.0).color(Color32::from_rgb(130, 210, 255)));
-                        ui.label(RichText::new(format!("Loss: {:?}", self.loss_choice)).size(10.5).color(Color32::from_rgb(240, 150, 150)));
+                        ui.label(
+                            RichText::new(format!(
+                                "Output Readout: {}",
+                                self.step_output_head.label()
+                            ))
+                            .size(11.0)
+                            .color(Color32::from_rgb(130, 210, 255)),
+                        );
+                        ui.label(
+                            RichText::new(format!("Loss: {:?}", self.loss_choice))
+                                .size(10.5)
+                                .color(Color32::from_rgb(240, 150, 150)),
+                        );
                     });
 
                 ui.add_space(8.0);

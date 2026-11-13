@@ -25,9 +25,9 @@ pub enum CanvasMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum StudioFocus {
     #[default]
-    Model,     // Model architecture, layers, dataflow graph, outliner, YAML
-    Training,  // Training plan, stages, compute budget, curriculum, live runner
-    Surgery,   // Post-training surgery, refusal abliteration, model soups, grafting
+    Model, // Model architecture, layers, dataflow graph, outliner, YAML
+    Training, // Training plan, stages, compute budget, curriculum, live runner
+    Surgery,  // Post-training surgery, refusal abliteration, model soups, grafting
 }
 
 impl StudioFocus {
@@ -41,9 +41,15 @@ impl StudioFocus {
 
     pub fn description(&self) -> &'static str {
         match self {
-            Self::Model => "Design neural network layers, tensor ports, residual wiring, and export code (Graph, Outliner, YAML)",
-            Self::Training => "Configure multi-stage curriculum, optimizers (Muon/AdamW), 4D parallelism, compute budgets, and live runner",
-            Self::Surgery => "Perform post-training weight surgery: refusal abliteration, SLERP/TIES model soups, and Frankenmerging",
+            Self::Model => {
+                "Design neural network layers, tensor ports, residual wiring, and export code (Graph, Outliner, YAML)"
+            }
+            Self::Training => {
+                "Configure multi-stage curriculum, optimizers (Muon/AdamW), 4D parallelism, compute budgets, and live runner"
+            }
+            Self::Surgery => {
+                "Perform post-training weight surgery: refusal abliteration, SLERP/TIES model soups, and Frankenmerging"
+            }
         }
     }
 }
