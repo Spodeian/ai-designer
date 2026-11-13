@@ -278,7 +278,9 @@ impl PrecisionFormat {
             Self::INT4Sym => "INT4 Symmetric (GPTQ / AWQ)",
             Self::INT4Asym => "INT4 Asymmetric (Zero-Point Offset)",
             Self::NF4 => "NF4 (NormalFloat-4 QLoRA)",
-            Self::DistributionFloat4 => "DistributionFloat-4 (Student-t / Laplace / Cauchy Quantiles)",
+            Self::DistributionFloat4 => {
+                "DistributionFloat-4 (Student-t / Laplace / Cauchy Quantiles)"
+            }
             Self::SF4 => "SF4 (Signed Float 4-bit)",
             Self::INT2 => "INT2 (2-bit Compressed)",
             Self::BitNet158b => "BitNet b1.58 (Native Ternary {-1, 0, +1})",

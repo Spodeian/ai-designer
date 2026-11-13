@@ -6,7 +6,7 @@
 //! dynamically size layer dimensions (d_model, depth, FFN expansion) across quantization levels
 //! (BitNet 1.58b, NF4, FP8, BF16, FP32) to saturate target hardware VRAM budgets.
 
-use crate::spec::archetypes::{scaffold_archetype, ArchitectureArchetype};
+use crate::spec::archetypes::{ArchitectureArchetype, scaffold_archetype};
 use crate::spec::precision::PrecisionFormat;
 use crate::spec::{AiDesignSpec, HardwareTargetProfile};
 use serde::{Deserialize, Serialize};
@@ -56,13 +56,27 @@ impl DataModificationIntent {
 
     pub fn short_description(&self) -> &'static str {
         match self {
-            Self::SpatialCompression => "Compresses multi-channel spatial grids into dense semantic latent embeddings via hierarchical patching.",
-            Self::CausalForecasting => "Propagates sequence tokens forward with strict causal masking, Rotary Position Embeddings (RoPE), and KV caching.",
-            Self::ManifoldExpansion => "Expands input features into 4x-8x higher dimensional space with SwiGLU gating to linearly untangle complex decision boundaries.",
-            Self::SpectralFiltering => "Decomposes inputs into Fourier modal bases to solve global continuous operators invariant to grid resolution.",
-            Self::ConditionalSparseRouting => "Routes input tokens through specialized expert sub-networks with dynamic load-balanced gating.",
-            Self::SymplecticConservation => "Integrates continuous flows preserving energy and Hamiltonian structure via reversible symplectic stages.",
-            Self::DenoisingBottleneck => "Progressively removes injected noise across timesteps via U-Net / DiT cross-attentive latent conditioning.",
+            Self::SpatialCompression => {
+                "Compresses multi-channel spatial grids into dense semantic latent embeddings via hierarchical patching."
+            }
+            Self::CausalForecasting => {
+                "Propagates sequence tokens forward with strict causal masking, Rotary Position Embeddings (RoPE), and KV caching."
+            }
+            Self::ManifoldExpansion => {
+                "Expands input features into 4x-8x higher dimensional space with SwiGLU gating to linearly untangle complex decision boundaries."
+            }
+            Self::SpectralFiltering => {
+                "Decomposes inputs into Fourier modal bases to solve global continuous operators invariant to grid resolution."
+            }
+            Self::ConditionalSparseRouting => {
+                "Routes input tokens through specialized expert sub-networks with dynamic load-balanced gating."
+            }
+            Self::SymplecticConservation => {
+                "Integrates continuous flows preserving energy and Hamiltonian structure via reversible symplectic stages."
+            }
+            Self::DenoisingBottleneck => {
+                "Progressively removes injected noise across timesteps via U-Net / DiT cross-attentive latent conditioning."
+            }
         }
     }
 
@@ -200,20 +214,24 @@ impl QuantizationSizingEstimator {
                     v if v <= 24.0 => (5120, 48, 40),
                     _ => (8192, 64, 64),
                 },
-                QuantizationTier::DistributionFloat4 | QuantizationTier::NF4 => match usable_vram_gb {
-                    v if v <= 4.0 => (1024, 20, 8),
-                    v if v <= 8.0 => (1792, 28, 14),
-                    v if v <= 16.0 => (2816, 36, 22),
-                    v if v <= 24.0 => (3584, 40, 28),
-                    _ => (5120, 56, 40),
-                },
-                QuantizationTier::Posit8 | QuantizationTier::LNS8 | QuantizationTier::FP8 => match usable_vram_gb {
-                    v if v <= 4.0 => (768, 16, 12),
-                    v if v <= 8.0 => (1280, 24, 16),
-                    v if v <= 16.0 => (2048, 32, 16),
-                    v if v <= 24.0 => (2560, 36, 20),
-                    _ => (4096, 48, 32),
-                },
+                QuantizationTier::DistributionFloat4 | QuantizationTier::NF4 => {
+                    match usable_vram_gb {
+                        v if v <= 4.0 => (1024, 20, 8),
+                        v if v <= 8.0 => (1792, 28, 14),
+                        v if v <= 16.0 => (2816, 36, 22),
+                        v if v <= 24.0 => (3584, 40, 28),
+                        _ => (5120, 56, 40),
+                    }
+                }
+                QuantizationTier::Posit8 | QuantizationTier::LNS8 | QuantizationTier::FP8 => {
+                    match usable_vram_gb {
+                        v if v <= 4.0 => (768, 16, 12),
+                        v if v <= 8.0 => (1280, 24, 16),
+                        v if v <= 16.0 => (2048, 32, 16),
+                        v if v <= 24.0 => (2560, 36, 20),
+                        _ => (4096, 48, 32),
+                    }
+                }
                 QuantizationTier::BF16 => match usable_vram_gb {
                     v if v <= 4.0 => (512, 12, 8),
                     v if v <= 8.0 => (896, 18, 14),
@@ -235,23 +253,25 @@ impl QuantizationSizingEstimator {
                 DataModificationIntent::ManifoldExpansion => 8, // Wide non-linear projection
                 DataModificationIntent::ConditionalSparseRouting => 4, // Multi-expert sizing
                 DataModificationIntent::SpectralFiltering => 2, // Compact modal representation
-                _ => 4, // Standard 4x SwiGLU / MLP
+                _ => 4,                                         // Standard 4x SwiGLU / MLP
             };
             let ffn_dim = d_model * ffn_mult;
 
             // Analytical parameter count calculation:
             // Per layer: Attention (4 * d_model^2) + FFN (2 or 3 * d_model * ffn_dim) + Norms
-            let params_per_layer = (4 * d_model * d_model) + (3 * d_model * ffn_dim) + (4 * d_model);
+            let params_per_layer =
+                (4 * d_model * d_model) + (3 * d_model * ffn_dim) + (4 * d_model);
             let embed_params = d_model * 32000; // Standard 32k vocab
             let total_params = (params_per_layer * depth + embed_params) as u64;
 
-            let weight_vram_gb = (total_params as f64 * bytes_per_weight) / (1024.0 * 1024.0 * 1024.0);
+            let weight_vram_gb =
+                (total_params as f64 * bytes_per_weight) / (1024.0 * 1024.0 * 1024.0);
 
             // KV Cache + working activation memory
             let kv_cache_bytes_per_token = 2 * depth * d_model * 2; // 2 bytes for BF16 KV
-            let kv_activation_vram_gb = ((batch_size * context_len * kv_cache_bytes_per_token) as f64
-                * 1.5)
-                / (1024.0 * 1024.0 * 1024.0);
+            let kv_activation_vram_gb =
+                ((batch_size * context_len * kv_cache_bytes_per_token) as f64 * 1.5)
+                    / (1024.0 * 1024.0 * 1024.0);
 
             let total_vram_gb = weight_vram_gb + kv_activation_vram_gb;
 
@@ -333,8 +353,17 @@ impl QuantizationSizingEstimator {
         let archetype = intent.to_archetype();
         let model_id = format!(
             "{}-{}-d{}",
-            intent.display_name().to_lowercase().replace(['/', ' '], "-"),
-            tradeoff.tier.name().split_whitespace().next().unwrap_or("Model").to_lowercase(),
+            intent
+                .display_name()
+                .to_lowercase()
+                .replace(['/', ' '], "-"),
+            tradeoff
+                .tier
+                .name()
+                .split_whitespace()
+                .next()
+                .unwrap_or("Model")
+                .to_lowercase(),
             tradeoff.d_model
         );
         let display_name = format!(
@@ -355,7 +384,9 @@ impl QuantizationSizingEstimator {
 
         spec.metadata.target_hardware = hardware.clone();
         spec.metadata.tags.push("data-guided-synthesis".to_string());
-        spec.metadata.tags.push(format!("quant:{:?}", tradeoff.precision_format));
+        spec.metadata
+            .tags
+            .push(format!("quant:{:?}", tradeoff.precision_format));
         spec.precision.default_weight_precision = tradeoff.precision_format;
         spec
     }
@@ -385,12 +416,24 @@ mod tests {
         assert_eq!(bitnet.tier, QuantizationTier::BitNet158b);
         assert_eq!(fp32.tier, QuantizationTier::FP32);
 
-        assert!(bitnet.d_model > fp32.d_model, "BitNet d_model ({}) should exceed FP32 d_model ({})", bitnet.d_model, fp32.d_model);
-        assert!(bitnet.total_params > fp32.total_params, "BitNet capacity should exceed FP32 capacity");
+        assert!(
+            bitnet.d_model > fp32.d_model,
+            "BitNet d_model ({}) should exceed FP32 d_model ({})",
+            bitnet.d_model,
+            fp32.d_model
+        );
+        assert!(
+            bitnet.total_params > fp32.total_params,
+            "BitNet capacity should exceed FP32 capacity"
+        );
 
         // Verify all fit comfortably within budget
         for opt in &options {
-            assert!(opt.total_vram_gb <= 16.0 * 1.05, "VRAM usage {} should be within budget", opt.total_vram_gb);
+            assert!(
+                opt.total_vram_gb <= 16.0 * 1.05,
+                "VRAM usage {} should be within budget",
+                opt.total_vram_gb
+            );
         }
     }
 
@@ -398,25 +441,32 @@ mod tests {
     fn test_data_intent_spec_synthesis() {
         let hardware = HardwareTargetProfile::rtx_4090();
         for &intent in DataModificationIntent::ALL {
-            let options = QuantizationSizingEstimator::estimate_tradeoffs(
-                8.0,
-                1024,
-                1,
-                intent,
-                &hardware,
-            );
+            let options =
+                QuantizationSizingEstimator::estimate_tradeoffs(8.0, 1024, 1, intent, &hardware);
             let chosen = &options[1]; // NF4
             let spec = QuantizationSizingEstimator::synthesize_spec_from_intent_and_tradeoff(
-                intent,
-                chosen,
-                &hardware,
+                intent, chosen, &hardware,
             );
 
-            assert!(!spec.inputs.is_empty(), "Spec inputs should not be empty for {:?}", intent);
-            assert!(!spec.outputs.is_empty(), "Spec outputs should not be empty for {:?}", intent);
-            assert!(!spec.graph.nodes.is_empty(), "Spec nodes should not be empty for {:?}", intent);
-            assert_eq!(spec.precision.default_weight_precision, PrecisionFormat::NF4);
+            assert!(
+                !spec.inputs.is_empty(),
+                "Spec inputs should not be empty for {:?}",
+                intent
+            );
+            assert!(
+                !spec.outputs.is_empty(),
+                "Spec outputs should not be empty for {:?}",
+                intent
+            );
+            assert!(
+                !spec.graph.nodes.is_empty(),
+                "Spec nodes should not be empty for {:?}",
+                intent
+            );
+            assert_eq!(
+                spec.precision.default_weight_precision,
+                PrecisionFormat::NF4
+            );
         }
     }
 }
-

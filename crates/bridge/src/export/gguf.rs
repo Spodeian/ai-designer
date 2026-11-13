@@ -7,9 +7,18 @@ use std::collections::HashMap;
 /// Generates a GGUF export bundle including metadata, conversion script, and KoboldCpp runner.
 pub fn generate_gguf_bundle(spec: &AiDesignSpec) -> HashMap<String, String> {
     let mut files = HashMap::new();
-    files.insert("gguf/manifest.json".to_string(), generate_gguf_manifest(spec));
-    files.insert("gguf/convert.py".to_string(), generate_gguf_convert_script(spec));
-    files.insert("gguf/kobold_launch.bat".to_string(), generate_kobold_launcher(spec));
+    files.insert(
+        "gguf/manifest.json".to_string(),
+        generate_gguf_manifest(spec),
+    );
+    files.insert(
+        "gguf/convert.py".to_string(),
+        generate_gguf_convert_script(spec),
+    );
+    files.insert(
+        "gguf/kobold_launch.bat".to_string(),
+        generate_kobold_launcher(spec),
+    );
     files.insert("gguf/README.md".to_string(), generate_gguf_readme(spec));
     files
 }
@@ -38,15 +47,19 @@ fn extract_arch_params(spec: &AiDesignSpec) -> (String, usize, usize, usize, usi
                 num_kv_heads = *h;
                 num_blocks += 1;
             }
-            OperatorKind::GQA { num_q_heads, num_kv_heads: kv, .. } => {
+            OperatorKind::GQA {
+                num_q_heads,
+                num_kv_heads: kv,
+                ..
+            } => {
                 num_heads = *num_q_heads;
                 num_kv_heads = *kv;
                 num_blocks += 1;
             }
-            OperatorKind::Linear { out_features, .. } => {
-                if *out_features > embed_len && *out_features % 64 == 0 {
-                    embed_len = *out_features;
-                }
+            OperatorKind::Linear { out_features, .. }
+                if *out_features > embed_len && *out_features % 64 == 0 =>
+            {
+                embed_len = *out_features;
             }
             _ => {}
         }
@@ -61,16 +74,23 @@ fn extract_arch_params(spec: &AiDesignSpec) -> (String, usize, usize, usize, usi
             shared::spec::TensorSpace::TimeSeries { horizon, .. } => {
                 context_len = *horizon;
             }
-            shared::spec::TensorSpace::ContinuousVector { dimension, .. } => {
-                if *dimension > 1 && context_len == 2048 {
-                    context_len = *dimension;
-                }
+            shared::spec::TensorSpace::ContinuousVector { dimension, .. }
+                if *dimension > 1 && context_len == 2048 =>
+            {
+                context_len = *dimension;
             }
             _ => {}
         }
     }
 
-    (arch_name, context_len, embed_len, num_blocks, num_heads, num_kv_heads)
+    (
+        arch_name,
+        context_len,
+        embed_len,
+        num_blocks,
+        num_heads,
+        num_kv_heads,
+    )
 }
 
 pub fn generate_gguf_manifest(spec: &AiDesignSpec) -> String {
@@ -135,8 +155,7 @@ if __name__ == "__main__":
     dst = sys.argv[2] if len(sys.argv) > 2 else "model.gguf"
     convert(src, dst)
 "#,
-        spec.metadata.model_id,
-        spec.metadata.model_id
+        spec.metadata.model_id, spec.metadata.model_id
     )
 }
 
@@ -147,8 +166,7 @@ pub fn generate_kobold_launcher(spec: &AiDesignSpec) -> String {
 REM KoboldCpp launcher for {}
 koboldcpp.exe --model model.gguf --contextsize {} --smart-context --usecublas --skiplauncher
 "#,
-        spec.metadata.model_id,
-        ctx
+        spec.metadata.model_id, ctx
     )
 }
 

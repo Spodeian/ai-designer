@@ -78,7 +78,9 @@ impl ArchitectureArchetype {
             Self::TabularPriorNetwork => "TabPFN Monotonic Prior-Data Network",
             Self::DeepResidual => "Deep Pre-LN Residual Network",
             Self::DenseMoE => "Sparse MoE Mixture-of-Experts",
-            Self::SymbolicAstReasoning => "Symbolic AST DAG Reasoning (Tree-Transformer + Equality Saturation)",
+            Self::SymbolicAstReasoning => {
+                "Symbolic AST DAG Reasoning (Tree-Transformer + Equality Saturation)"
+            }
         }
     }
 
@@ -178,7 +180,7 @@ impl ArchitectureArchetype {
             Self::TabularPriorNetwork => "\u{f5aa}",      // bi-table
             Self::DeepResidual => "\u{f45b}",             // bi-layers
             Self::DenseMoE => "\u{f544}",                 // bi-shuffle
-            Self::SymbolicAstReasoning => "\u{f6ff}",      // diagram-tree
+            Self::SymbolicAstReasoning => "\u{f6ff}",     // diagram-tree
         }
     }
 

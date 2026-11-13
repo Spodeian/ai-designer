@@ -9,8 +9,8 @@ use shared::spec::training::TrainingPlanPreset;
 use shared::spec::{
     AiDesignSpec, CoordinateEncoding, DataModificationIntent, HaltingGate, HardwareTargetProfile,
     InputPortSpec, LossPairing, NodeSpec, NormPlacement, NormalizerSpec, OperatorKind,
-    OutputPortSpec, PatchingSpec, QuantizationSizingEstimator, QuantizationTier, StructuralConstraint,
-    SymbolicDim, TensorSpace, WiringPattern,
+    OutputPortSpec, PatchingSpec, QuantizationSizingEstimator, QuantizationTier,
+    StructuralConstraint, SymbolicDim, TensorSpace, WiringPattern,
 };
 use shared::{ArchitectureArchetype, PrecisionFormat, scaffold_archetype};
 
@@ -1529,11 +1529,12 @@ impl DesignWizardModal {
                         .iter()
                         .find(|o| o.tier == self.selected_quant_tier)
                         .unwrap_or(&options[1]);
-                    let spec = QuantizationSizingEstimator::synthesize_spec_from_intent_and_tradeoff(
-                        self.selected_intent,
-                        chosen,
-                        &self.target_hardware,
-                    );
+                    let spec =
+                        QuantizationSizingEstimator::synthesize_spec_from_intent_and_tradeoff(
+                            self.selected_intent,
+                            chosen,
+                            &self.target_hardware,
+                        );
                     *studio = StudioState::new_with_starter(spec);
                 }
                 WizardTab::StepByStepBuilder => {
