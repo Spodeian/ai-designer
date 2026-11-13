@@ -1,12 +1,14 @@
-//! Unified Multi-Backend Exporter: PyTorch 2, JAX, Candle, wGPU, and SIMD CPU.
+//! Unified Multi-Backend Exporter: PyTorch 2, JAX, Candle, wGPU, SIMD CPU, and GGUF.
 
 pub mod candle;
+pub mod gguf;
 pub mod jax;
 pub mod pytorch2;
 pub mod simd_cpu;
 pub mod wgpu;
 
 pub use candle::*;
+pub use gguf::*;
 pub use jax::*;
 pub use pytorch2::*;
 pub use simd_cpu::*;
@@ -25,6 +27,7 @@ pub enum ExportBackend {
     Candle,
     WGpu,
     SimdCpu,
+    GGUF,
 }
 
 impl ExportBackend {
@@ -35,6 +38,7 @@ impl ExportBackend {
             Self::Candle => "Rust Candle (Candle Bridge)",
             Self::WGpu => "WebGPU (WGSL Compute Shaders)",
             Self::SimdCpu => "SIMD CPU (AVX2 / NEON Vectorized)",
+            Self::GGUF => "GGUF v3 (KoboldCpp / llama.cpp / sml-runtime)",
         }
     }
 }
@@ -101,6 +105,11 @@ pub fn export_backend(spec: &AiDesignSpec, backend: ExportBackend) -> ExportArti
                 artifacts.insert(path, content);
             }
         }
+        ExportBackend::GGUF => {
+            for (path, content) in generate_gguf_bundle(spec) {
+                artifacts.insert(path, content);
+            }
+        }
     }
 
     artifacts
@@ -116,6 +125,7 @@ pub fn export_all_targets(spec: &AiDesignSpec) -> ExportArtifacts {
         ExportBackend::Candle,
         ExportBackend::WGpu,
         ExportBackend::SimdCpu,
+        ExportBackend::GGUF,
     ] {
         let sub = export_backend(spec, backend);
         for (k, v) in sub.files {

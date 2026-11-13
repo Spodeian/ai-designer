@@ -7,9 +7,10 @@ use crate::studio_state::{CanvasMode, StudioState};
 use eframe::egui::{self, Color32, CornerRadius, RichText, ScrollArea, Stroke, Ui, Vec2};
 use shared::spec::training::TrainingPlanPreset;
 use shared::spec::{
-    AiDesignSpec, CoordinateEncoding, HaltingGate, HardwareTargetProfile, InputPortSpec,
-    LossPairing, NodeSpec, NormPlacement, NormalizerSpec, OperatorKind, OutputPortSpec,
-    PatchingSpec, StructuralConstraint, SymbolicDim, TensorSpace, WiringPattern,
+    AiDesignSpec, CoordinateEncoding, DataModificationIntent, HaltingGate, HardwareTargetProfile,
+    InputPortSpec, LossPairing, NodeSpec, NormPlacement, NormalizerSpec, OperatorKind,
+    OutputPortSpec, PatchingSpec, QuantizationSizingEstimator, QuantizationTier,
+    StructuralConstraint, SymbolicDim, TensorSpace, WiringPattern,
 };
 use shared::{ArchitectureArchetype, PrecisionFormat, scaffold_archetype};
 
@@ -17,6 +18,7 @@ use shared::{ArchitectureArchetype, PrecisionFormat, scaffold_archetype};
 pub enum WizardTab {
     #[default]
     StepByStepBuilder,
+    DataTransformationGuided,
     Archetypes,
     StarterTemplates,
     TrainingPlanner,
@@ -374,6 +376,13 @@ pub struct DesignWizardModal {
     pub precision: PrecisionFormat,
     pub search_query: String,
     pub selected_template_index: Option<usize>,
+
+    // --- Data-Transformation Guided Sizing State ---
+    pub selected_intent: DataModificationIntent,
+    pub target_vram_gb: f64,
+    pub selected_quant_tier: QuantizationTier,
+    pub guided_context_len: usize,
+    pub guided_batch_size: usize,
 }
 
 impl Default for DesignWizardModal {
@@ -381,6 +390,13 @@ impl Default for DesignWizardModal {
         Self {
             is_open: false,
             current_tab: WizardTab::StepByStepBuilder,
+
+            // Data-Guided Sizing Defaults
+            selected_intent: DataModificationIntent::CausalForecasting,
+            target_vram_gb: 16.0,
+            selected_quant_tier: QuantizationTier::NF4,
+            guided_context_len: 2048,
+            guided_batch_size: 1,
 
             // Step-by-Step Defaults (Llama-3 modern layout)
             builder_step: BuilderStep::ModalityAndTask,
@@ -1372,6 +1388,15 @@ impl DesignWizardModal {
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .selectable_label(
+                        self.current_tab == WizardTab::DataTransformationGuided,
+                        format!("{} Data-Guided Sizing", bi::MAGIC),
+                    )
+                    .clicked()
+                {
+                    self.current_tab = WizardTab::DataTransformationGuided;
+                }
+                if ui
+                    .selectable_label(
                         self.current_tab == WizardTab::StepByStepBuilder,
                         format!("{} Guided Step-by-Step Builder", bi::SLIDERS),
                     )
@@ -1434,6 +1459,7 @@ impl DesignWizardModal {
             ui.separator();
 
             match self.current_tab {
+                WizardTab::DataTransformationGuided => self.render_data_guided_tab(ui, &mut should_create),
                 WizardTab::StepByStepBuilder => self.render_step_by_step_tab(ui, &mut should_create),
                 WizardTab::Archetypes => self.render_archetypes_tab(ui),
                 WizardTab::StarterTemplates => self.render_templates_tab(ui),
@@ -1452,6 +1478,9 @@ impl DesignWizardModal {
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let action_label = match self.current_tab {
+                        WizardTab::DataTransformationGuided => {
+                            format!("{} Synthesize Data-Guided Architecture", bi::MAGIC)
+                        }
                         WizardTab::StepByStepBuilder => {
                             format!("{} Assemble & Scaffold Custom Model", bi::ROCKET_TAKEOFF)
                         }
@@ -1488,6 +1517,26 @@ impl DesignWizardModal {
 
         if should_create {
             match self.current_tab {
+                WizardTab::DataTransformationGuided => {
+                    let options = QuantizationSizingEstimator::estimate_tradeoffs(
+                        self.target_vram_gb,
+                        self.guided_context_len,
+                        self.guided_batch_size,
+                        self.selected_intent,
+                        &self.target_hardware,
+                    );
+                    let chosen = options
+                        .iter()
+                        .find(|o| o.tier == self.selected_quant_tier)
+                        .unwrap_or(&options[1]);
+                    let spec =
+                        QuantizationSizingEstimator::synthesize_spec_from_intent_and_tradeoff(
+                            self.selected_intent,
+                            chosen,
+                            &self.target_hardware,
+                        );
+                    *studio = StudioState::new_with_starter(spec);
+                }
                 WizardTab::StepByStepBuilder => {
                     let spec = self.assemble_step_by_step_model();
                     *studio = StudioState::new_with_starter(spec);
@@ -1541,6 +1590,271 @@ impl DesignWizardModal {
         if should_close {
             self.is_open = false;
         }
+    }
+
+    // --- Data-Transformation Guided Sizing Tab ---
+
+    fn render_data_guided_tab(&mut self, ui: &mut Ui, should_create: &mut bool) {
+        ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
+            // Header Frame
+            egui::Frame::group(ui.style())
+                .fill(Color32::from_rgb(20, 24, 34))
+                .stroke(Stroke::new(1.0, Color32::from_rgb(45, 55, 75)))
+                .corner_radius(CornerRadius::same(6))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(bi::MAGIC).size(18.0).color(Color32::from_rgb(120, 210, 255)));
+                        ui.vertical(|ui| {
+                            ui.label(
+                                RichText::new("Data-Transformation Guided Architecture Synthesis")
+                                    .size(14.0)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            );
+                            ui.label(
+                                RichText::new(
+                                    "Focus on how you want to modify data. The engine dynamically calculates Pareto sizing trade-offs across quantization levels to saturate your VRAM budget.",
+                                )
+                                .size(11.5)
+                                .color(Color32::from_rgb(175, 185, 205)),
+                            );
+                        });
+                    });
+                });
+
+            ui.add_space(8.0);
+
+            // Step 1: Select Data Modification Intent
+            ui.label(
+                RichText::new("1. Choose Data Modification Intent (Transformation Goal)")
+                    .size(13.0)
+                    .strong()
+                    .color(Color32::from_rgb(120, 210, 255)),
+            );
+            ui.add_space(4.0);
+
+            for &intent in DataModificationIntent::ALL {
+                let is_selected = self.selected_intent == intent;
+                let bg_color = if is_selected {
+                    Color32::from_rgb(30, 45, 70)
+                } else {
+                    Color32::from_rgb(22, 26, 36)
+                };
+                let stroke_color = if is_selected {
+                    Color32::from_rgb(90, 160, 255)
+                } else {
+                    Color32::from_rgb(45, 52, 68)
+                };
+
+                egui::Frame::group(ui.style())
+                    .fill(bg_color)
+                    .stroke(Stroke::new(if is_selected { 1.5 } else { 1.0 }, stroke_color))
+                    .corner_radius(CornerRadius::same(6))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let icon = match intent {
+                                DataModificationIntent::SpatialCompression => bi::BOX_ARROW_IN_RIGHT,
+                                DataModificationIntent::CausalForecasting => bi::CPU,
+                                DataModificationIntent::ManifoldExpansion => bi::DIAGRAM_3,
+                                DataModificationIntent::SpectralFiltering => bi::ACTIVITY,
+                                DataModificationIntent::ConditionalSparseRouting => bi::GRID_1X2,
+                                DataModificationIntent::SymplecticConservation => bi::SHIELD_CHECK,
+                                DataModificationIntent::DenoisingBottleneck => bi::STARS,
+                            };
+                            if ui
+                                .selectable_label(
+                                    is_selected,
+                                    RichText::new(format!("{} {}", icon, intent.display_name())).strong(),
+                                )
+                                .clicked()
+                            {
+                                self.selected_intent = intent;
+                            }
+                        });
+                        ui.label(
+                            RichText::new(intent.short_description())
+                                .size(11.0)
+                                .color(Color32::from_rgb(170, 180, 195)),
+                        );
+                    });
+                ui.add_space(3.0);
+            }
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+
+            // Step 2: Target Hardware & VRAM Capacity
+            ui.label(
+                RichText::new("2. Target VRAM Budget & Execution Scope")
+                    .size(13.0)
+                    .strong()
+                    .color(Color32::from_rgb(120, 210, 255)),
+            );
+            ui.add_space(4.0);
+
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Target VRAM Budget:").strong());
+                ui.add(egui::Slider::new(&mut self.target_vram_gb, 1.0..=96.0).suffix(" GB").logarithmic(true));
+
+                ui.label("| Quick Presets:");
+                if ui.button("4 GB (Edge)").clicked() {
+                    self.target_vram_gb = 4.0;
+                }
+                if ui.button("8 GB (Laptop)").clicked() {
+                    self.target_vram_gb = 8.0;
+                }
+                if ui.button("16 GB (Desktop)").clicked() {
+                    self.target_vram_gb = 16.0;
+                }
+                if ui.button("24 GB (RTX 4090)").clicked() {
+                    self.target_vram_gb = 24.0;
+                }
+                if ui.button("80 GB (H100)").clicked() {
+                    self.target_vram_gb = 80.0;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Context Length:");
+                egui::ComboBox::from_id_salt("guided_ctx_len")
+                    .selected_text(format!("{} tokens", self.guided_context_len))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.guided_context_len, 512, "512 tokens");
+                        ui.selectable_value(&mut self.guided_context_len, 1024, "1,024 tokens");
+                        ui.selectable_value(&mut self.guided_context_len, 2048, "2,048 tokens");
+                        ui.selectable_value(&mut self.guided_context_len, 4096, "4,096 tokens");
+                        ui.selectable_value(&mut self.guided_context_len, 8192, "8,192 tokens");
+                    });
+
+                ui.add_space(12.0);
+                ui.label("Batch Size:");
+                ui.add(egui::DragValue::new(&mut self.guided_batch_size).range(1..=64));
+            });
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+
+            // Step 3: Quantization vs. Layer Sizing Trade-Off Matrix
+            ui.label(
+                RichText::new("3. Quantization vs. Layer Size Trade-Off Frontier")
+                    .size(13.0)
+                    .strong()
+                    .color(Color32::from_rgb(120, 210, 255)),
+            );
+            ui.label(
+                RichText::new("Choose a quantization tier to automatically scale model width (d_model), depth (layers), and capacity:")
+                    .size(11.5)
+                    .color(Color32::from_rgb(175, 185, 205)),
+            );
+            ui.add_space(6.0);
+
+            let options = QuantizationSizingEstimator::estimate_tradeoffs(
+                self.target_vram_gb,
+                self.guided_context_len,
+                self.guided_batch_size,
+                self.selected_intent,
+                &self.target_hardware,
+            );
+
+            for opt in &options {
+                let is_selected = self.selected_quant_tier == opt.tier;
+                let bg_color = if is_selected {
+                    Color32::from_rgb(25, 45, 60)
+                } else {
+                    Color32::from_rgb(20, 24, 32)
+                };
+                let stroke_color = if is_selected {
+                    Color32::from_rgb(80, 200, 150)
+                } else {
+                    Color32::from_rgb(45, 52, 65)
+                };
+
+                egui::Frame::group(ui.style())
+                    .fill(bg_color)
+                    .stroke(Stroke::new(if is_selected { 1.5 } else { 1.0 }, stroke_color))
+                    .corner_radius(CornerRadius::same(6))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let tier_title = format!("{}  ({:.2} bits/weight)", opt.tier.name(), opt.bits_per_weight);
+                            if ui
+                                .selectable_label(
+                                    is_selected,
+                                    RichText::new(tier_title).size(13.0).strong(),
+                                )
+                                .clicked()
+                            {
+                                self.selected_quant_tier = opt.tier;
+                            }
+
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let badge_text = format!("{:.1}M Params | {:.2} GB VRAM", opt.total_params as f64 / 1_000_000.0, opt.total_vram_gb);
+                                ui.label(
+                                    RichText::new(badge_text)
+                                        .size(11.5)
+                                        .strong()
+                                        .color(if is_selected { Color32::from_rgb(120, 240, 170) } else { Color32::from_rgb(180, 200, 220) }),
+                                );
+                            });
+                        });
+
+                        ui.add_space(2.0);
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!(
+                                    "Dimensions: d_model = {} | Depth = {} layers | Heads = {} | FFN = {}",
+                                    opt.d_model, opt.depth, opt.n_heads, opt.ffn_dim
+                                ))
+                                .size(11.0)
+                                .color(Color32::from_rgb(200, 215, 230)),
+                            );
+                            ui.label("|");
+                            ui.label(
+                                RichText::new(format!(
+                                    "Weights: {:.2} GB, KV/Act: {:.2} GB",
+                                    opt.weight_vram_gb, opt.kv_activation_vram_gb
+                                ))
+                                .size(11.0)
+                                .color(Color32::from_rgb(160, 175, 190)),
+                            );
+                            ui.label("|");
+                            ui.label(
+                                RichText::new(format!(
+                                    "Est. Speed: {:.0} tok/s | Score: {:.0}",
+                                    opt.estimated_tokens_per_sec, opt.expressivity_capacity_score
+                                ))
+                                .size(11.0)
+                                .color(Color32::from_rgb(140, 220, 255)),
+                            );
+                        });
+
+                        ui.add_space(2.0);
+                        ui.label(
+                            RichText::new(&opt.recommendation_summary)
+                                .size(11.0)
+                                .italics()
+                                .color(Color32::from_rgb(150, 165, 185)),
+                        );
+                    });
+                ui.add_space(4.0);
+            }
+
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui
+                    .button(
+                        RichText::new(format!("{} Synthesize & Load Architecture", bi::MAGIC))
+                            .size(13.0)
+                            .strong()
+                            .color(Color32::from_rgb(120, 240, 170)),
+                    )
+                    .clicked()
+                {
+                    *should_create = true;
+                }
+            });
+        });
     }
 
     // --- Interactive Step-by-Step UI Panels ---
