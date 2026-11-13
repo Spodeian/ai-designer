@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "ai-designer-bridge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "ai-designer-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mimalloc",
  "serde_json",
@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "android-activity",
  "crossbeam-channel",
@@ -1033,7 +1033,7 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ai-designer-cli",
  "app",
@@ -3590,7 +3590,7 @@ dependencies = [
 
 [[package]]
 name = "shared"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bson",
  "byteorder",
@@ -4607,7 +4607,7 @@ dependencies = [
 
 [[package]]
 name = "web"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "app",
  "console_error_panic_hook",
