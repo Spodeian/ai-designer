@@ -726,11 +726,8 @@ impl AiDesignerApp {
             &mut self.state.workspace_registry,
             &mut self.studio,
         );
-        self.command_palette.render(
-            ui.ctx(),
-            &mut self.studio,
-            &mut self.show_shortcuts_modal,
-        );
+        self.command_palette
+            .render(ui.ctx(), &mut self.studio, &mut self.show_shortcuts_modal);
         components::modals::render_shortcuts_modal(ui.ctx(), &mut self.show_shortcuts_modal);
     }
 
@@ -785,13 +782,23 @@ impl AiDesignerApp {
 
         if self.state.active_page == AppPage::Designer && !ctx.egui_wants_keyboard_input() {
             // Undo / Redo Shortcuts
-            if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && !i.modifiers.shift && i.key_pressed(egui::Key::Z)) {
+            if ctx.input(|i| {
+                (i.modifiers.command || i.modifiers.ctrl)
+                    && !i.modifiers.shift
+                    && i.key_pressed(egui::Key::Z)
+            }) {
                 self.studio.undo();
             }
-            if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && (i.key_pressed(egui::Key::Y) || (i.modifiers.shift && i.key_pressed(egui::Key::Z)))) {
+            if ctx.input(|i| {
+                (i.modifiers.command || i.modifiers.ctrl)
+                    && (i.key_pressed(egui::Key::Y)
+                        || (i.modifiers.shift && i.key_pressed(egui::Key::Z)))
+            }) {
                 self.studio.redo();
             }
-            if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::D)) {
+            if ctx
+                .input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::D))
+            {
                 self.studio.duplicate_selected_node();
             }
 

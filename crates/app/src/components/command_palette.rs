@@ -49,22 +49,12 @@ pub struct PaletteItem {
     pub action: PaletteAction,
 }
 
+#[derive(Default)]
 pub struct CommandPalette {
     pub is_open: bool,
     pub query: String,
     pub selected_index: usize,
     pub request_focus: bool,
-}
-
-impl Default for CommandPalette {
-    fn default() -> Self {
-        Self {
-            is_open: false,
-            query: String::new(),
-            selected_index: 0,
-            request_focus: false,
-        }
-    }
 }
 
 impl CommandPalette {
