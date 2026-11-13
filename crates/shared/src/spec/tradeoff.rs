@@ -407,11 +407,11 @@ mod tests {
             &hardware,
         );
 
-        assert_eq!(options.len(), 5);
+        assert_eq!(options.len(), QuantizationTier::ALL.len());
 
         // Lower bitwidths should yield wider models (larger d_model)
         let bitnet = &options[0];
-        let fp32 = &options[4];
+        let fp32 = options.last().unwrap();
 
         assert_eq!(bitnet.tier, QuantizationTier::BitNet158b);
         assert_eq!(fp32.tier, QuantizationTier::FP32);
@@ -443,7 +443,10 @@ mod tests {
         for &intent in DataModificationIntent::ALL {
             let options =
                 QuantizationSizingEstimator::estimate_tradeoffs(8.0, 1024, 1, intent, &hardware);
-            let chosen = &options[1]; // NF4
+            let chosen = options
+                .iter()
+                .find(|o| o.tier == QuantizationTier::NF4)
+                .expect("NF4 tier should be offered");
             let spec = QuantizationSizingEstimator::synthesize_spec_from_intent_and_tradeoff(
                 intent, chosen, &hardware,
             );
