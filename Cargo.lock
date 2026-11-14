@@ -3613,6 +3613,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "spodeian-stats",
  "spodeian-tokens",
  "thiserror 2.0.21",
  "toml",
@@ -3821,6 +3822,14 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "spodeian-stats"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

@@ -19,6 +19,7 @@ byteorder = { workspace = true }
 bson = { workspace = true }
 miniz_oxide = { workspace = true }
 thiserror = { workspace = true }
+spodeian-stats = { workspace = true }
 spodeian-tokens = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

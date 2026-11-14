@@ -53,6 +53,7 @@ wasm-bindgen-test = "0.3"
 winit = { version = "0.30", default-features = false }
 android-activity = { version = "0.6", default-features = false, features = ["native-activity"] }
 spodeian-cache = { path = "../spodeian-core/crates/spodeian-cache" }
+spodeian-stats = { path = "../spodeian-core/crates/spodeian-stats" }
 spodeian-tokens = { path = "../spodeian-core/crates/spodeian-tokens" }
 spodeian-telemetry = { path = "../spodeian-core/crates/spodeian-telemetry" }
 spodeian-web-utils = { path = "../spodeian-core/crates/spodeian-web-utils" }
