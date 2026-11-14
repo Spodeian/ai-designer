@@ -925,6 +925,42 @@ impl TrainingPlannerView {
                                 ui.end_row();
                             });
                     }
+                    shared::spec::training::OptimizerFamily::SelfOptimizingMeta => {
+                        let meta = &mut state.spec.training.self_optimizing_meta;
+                        egui::Grid::new("planner_meta_opt_grid")
+                            .num_columns(2)
+                            .spacing([14.0, 6.0])
+                            .show(ui, |ui| {
+                                ui.label("Initial Meta LR:");
+                                changed |= ui.add(egui::DragValue::new(&mut meta.lr).speed(0.0001).range(1e-6..=0.5)).changed();
+                                ui.end_row();
+                                ui.label("Hypergradient LR:")
+                                    .on_hover_text("Online step-size meta-adaptation rate along inner-product gradient alignment.");
+                                changed |= ui.add(egui::DragValue::new(&mut meta.hypergrad_lr).speed(0.005).range(0.0..=1.0)).changed();
+                                ui.end_row();
+                                ui.label("Trust-Region Clip:")
+                                    .on_hover_text("Maximum elementwise step magnitude enforced on normalized adaptive updates.");
+                                changed |= ui.add(egui::DragValue::new(&mut meta.trust_region_clip).speed(0.05).range(0.05..=10.0)).changed();
+                                ui.end_row();
+                                ui.label("Continuous Integrator:");
+                                egui::ComboBox::from_id_salt("planner_meta_integrator_combo")
+                                    .selected_text(meta.integrator.label())
+                                    .width(240.0)
+                                    .show_ui(ui, |ui| {
+                                        for &kind in shared::spec::training::ContinuousIntegratorKind::ALL {
+                                            if ui
+                                                .selectable_label(meta.integrator == kind, kind.label())
+                                                .on_hover_text(kind.description())
+                                                .changed()
+                                            {
+                                                meta.integrator = kind;
+                                                changed = true;
+                                            }
+                                        }
+                                    });
+                                ui.end_row();
+                            });
+                    }
                     _ => {
                         ui.horizontal(|ui| {
                             ui.label("Base Learning Rate:");

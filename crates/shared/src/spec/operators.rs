@@ -1511,7 +1511,7 @@ impl OperatorKind {
         }
     }
 
-    /// Primary reference curriculum topic slug in AI-Examples.
+    /// Primary reference curriculum topic slug in the embedded AI Designer guide.
     pub fn curriculum_slug(&self) -> &'static str {
         match self {
             Self::Activation { .. } => "05_architectures/01_mlp_moe_soups_and_kan",

@@ -279,7 +279,7 @@ impl InspectorView {
                         .color(Color32::from_rgb(110, 205, 255)),
                     &url,
                 )
-                .on_hover_text(format!("Open AI-Examples reference: {url}"));
+                .on_hover_text(format!("Open AI Designer reference: {url}"));
             });
             ui.add_space(4.0);
 

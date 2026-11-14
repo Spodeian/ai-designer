@@ -739,7 +739,7 @@ impl WorkspaceManagerModal {
         ui.label(RichText::new("Turnkey Web-to-Compute Bridge Options:").strong());
         ui.horizontal_wrapped(|ui| {
             if ui.button(format!("{} Copy Colab 1-Click Bootstrap", bi::COPY)).clicked() {
-                let colab_script = "# AI Designer Colab Bootstrap\n!pip install torch triton safetensors\n!git clone https://github.com/.../AI-Examples.git\n# Run training with mediated telemetry\n!aid train run model.yaml --grokfast\n";
+                let colab_script = "# AI Designer Colab Bootstrap\n!pip install torch triton safetensors\n!git clone https://github.com/Spodeian/ai-designer.git\n# Run training with mediated telemetry\n!aid train run model.yaml --grokfast\n";
                 ui.ctx().copy_text(colab_script.to_string());
                 self.status_message = Some(("Copied Colab bootstrap snippet to clipboard!".to_string(), false));
             }

@@ -155,7 +155,7 @@ The standalone `aid` binary executes instantly with zero graphics initialization
 | **`package`** | `aid package dit.yaml --weights model.safetensors -o model.aidpkg` | Bundles specification and weights into a 64-byte page-aligned `.aidpkg`, `.pkg`, or `.tar.gz` archive. |
 | **`unpack`** | `aid unpack model.aidpkg -o extracted/` | Extracts blueprints, manifest, and weights from `.aidpkg`, `.pkg`, or `.tar.gz`. |
 | **`hardware`** | `aid hardware` | Probes host CPU cores, OS, architecture, and live GPU specs via `nvidia-smi`. |
-| **`catalog`** | `aid catalog` | Lists all 18 `AI-Examples` curriculum categories and their representative topics. |
+| **`catalog`** | `aid catalog` | Lists all 18 embedded `AI Designer` curriculum categories and their representative topics. |
 | **`audit`** | `aid audit ../../pytorch2` | Audits repository PyTorch 2 modules and summarizes operator AST coverage. |
 
 ---

@@ -22,7 +22,7 @@ pub fn render_about_page(
                 ));
                 ui.label(
                     RichText::new(
-                        "Universal AI Architect Workbench for the 18-Category, 263-Topic AI-Examples Curriculum",
+                        "Universal AI Architect Workbench for the Embedded 18-Category, 263-Topic AI Designer Curriculum",
                     )
                     .color(ui.visuals().weak_text_color()),
                 );

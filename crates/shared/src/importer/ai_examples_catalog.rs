@@ -1,4 +1,4 @@
-//! AI-Examples Repository Topic Catalog: indexes the 18 categories and key architectural archetypes across the codebase.
+//! Embedded Curriculum Topic Catalog: indexes the 18 categories and key architectural archetypes bundled in AI Designer.
 
 use serde::Serialize;
 
