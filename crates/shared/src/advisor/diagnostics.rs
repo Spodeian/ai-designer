@@ -40,7 +40,7 @@ impl RuleCategory {
 
     pub fn curriculum_url(self) -> String {
         format!(
-            "https://github.com/Spodeian/AI-Examples/tree/main/notebooks/{}",
+            "https://github.com/Spodeian/ai-designer/blob/main/docs/INDEX_BY_GOAL.md#{}",
             self.curriculum_slug()
         )
     }

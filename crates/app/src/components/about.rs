@@ -37,13 +37,13 @@ pub fn render_about_page(
                     );
                     ui.hyperlink_to(
                         RichText::new(format!(
-                            "{} AI-Examples Repository {}",
+                            "{} AI-Designer Repository {}",
                             bi::BOOK,
                             bi::BOX_ARROW_UP_RIGHT
                         ))
                         .small()
                         .color(Color32::from_rgb(100, 195, 255)),
-                        "https://github.com/Spodeian/AI-Examples",
+                        "https://github.com/Spodeian/ai-designer",
                     );
                 });
             });

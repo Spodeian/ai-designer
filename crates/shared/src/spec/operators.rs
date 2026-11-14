@@ -682,14 +682,11 @@ impl OperatorKind {
         self.overview().complexity_tag
     }
 
-    /// Clickable URL to the corresponding reference topic in the AI-Examples repository.
+    /// Clickable URL to the corresponding reference topic in the ai-designer curriculum docs.
     pub fn curriculum_url(&self) -> String {
         let slug = self.curriculum_slug();
-        if slug.contains('/') {
-            format!("https://github.com/Spodeian/AI-Examples/blob/main/markdown/{slug}.md")
-        } else {
-            format!("https://github.com/Spodeian/AI-Examples/tree/main/notebooks/{slug}")
-        }
+        let anchor = slug.replace('/', "-");
+        format!("https://github.com/Spodeian/ai-designer/blob/main/docs/INDEX_BY_GOAL.md#{anchor}")
     }
 
     /// Architectural overview describing what the operator computes, when to use it, and what typically follows it.

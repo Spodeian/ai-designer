@@ -101,3 +101,88 @@ fn test_all_starter_templates_parse_and_roundtrip() {
         template_count
     );
 }
+
+struct TempPyDir(std::path::PathBuf);
+
+impl TempPyDir {
+    fn new(prefix: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!(
+            "ai_designer_{prefix}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).expect("create temp py dir");
+        Self(dir)
+    }
+}
+
+impl Drop for TempPyDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[test]
+fn test_topic_metadata_json_roundtrip() {
+    let meta = shared::importer::TopicMetadata {
+        category: "00_foundations".to_string(),
+        slug: "01_linear_neuron".to_string(),
+        title: "Linear Neuron and Invertible Transforms".to_string(),
+        d_model: 64,
+        seq_len: 16,
+        parameter_count: 65,
+        memory_bound: true,
+        parity_tolerance: 1e-5,
+    };
+
+    let json = serde_json::to_string(&meta).expect("serialize TopicMetadata");
+    let decoded: shared::importer::TopicMetadata =
+        serde_json::from_str(&json).expect("deserialize TopicMetadata");
+    assert_eq!(meta, decoded);
+}
+
+#[test]
+fn test_import_from_python_directory_skips_ignored_dirs() {
+    let root = TempPyDir::new("py_dir_import");
+    let pkg = root.0.join("model");
+    let ignored_cache = pkg.join("__pycache__");
+    let ignored_hidden = root.0.join(".hidden");
+    fs::create_dir_all(&ignored_cache).unwrap();
+    fs::create_dir_all(&ignored_hidden).unwrap();
+
+    fs::write(
+        pkg.join("01_block.py"),
+        "import torch.nn as nn\nclass SubBlock(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.fc = nn.Linear(32, 32)\n    def forward(self, x):\n        return self.fc(x)\n",
+    )
+    .unwrap();
+    fs::write(
+        pkg.join("02_net.py"),
+        "class MainNet(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.norm = nn.RMSNorm(64)\n        self.proj = nn.Linear(64, 128, bias=False)\n    def forward(self, x):\n        return self.proj(self.norm(x))\n",
+    )
+    .unwrap();
+    fs::write(
+        ignored_cache.join("cached.py"),
+        "class IgnoredCacheNet(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.a = nn.Linear(8, 8)\n        self.b = nn.Linear(8, 8)\n        self.c = nn.Linear(8, 8)\n",
+    )
+    .unwrap();
+    fs::write(
+        ignored_hidden.join("secret.py"),
+        "class IgnoredHiddenNet(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.a = nn.Linear(8, 8)\n",
+    )
+    .unwrap();
+
+    let spec = shared::importer::import_from_python_directory(&root.0, None)
+        .expect("import multi-file python directory");
+    assert_eq!(spec.metadata.model_id, "main_net");
+    assert_eq!(spec.graph.nodes.len(), 2);
+
+    let err = shared::importer::import_from_python_directory(
+        &root.0,
+        Some("IgnoredCacheNet"),
+    )
+    .expect_err("ignored __pycache__ directory must not be scanned");
+    assert!(err.contains("IgnoredCacheNet"));
+}

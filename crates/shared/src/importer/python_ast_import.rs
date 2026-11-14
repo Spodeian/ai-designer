@@ -54,6 +54,63 @@ pub fn import_from_python_source(
     synthesize_spec_from_class(target)
 }
 
+/// Recursively collects UTF-8 `.py` files under `root` in deterministic lexicographical path order,
+/// concatenates them, and reverse-engineers a PyTorch `nn.Module` into an `AiDesignSpec`.
+pub fn import_from_python_directory(
+    root: &std::path::Path,
+    target_class: Option<&str>,
+) -> Result<AiDesignSpec, String> {
+    if !root.is_dir() {
+        return Err(format!("Python directory does not exist: {}", root.display()));
+    }
+
+    let mut files = Vec::new();
+    collect_py_files(root, &mut files)?;
+    files.sort();
+
+    let mut sources = Vec::new();
+    for path in files {
+        let bytes = std::fs::read(&path)
+            .map_err(|e| format!("Failed to read '{}': {e}", path.display()))?;
+        if let Ok(text) = String::from_utf8(bytes) {
+            sources.push(text);
+        }
+    }
+
+    if sources.is_empty() {
+        return Err(format!("No UTF-8 .py files found in '{}'", root.display()));
+    }
+
+    let combined = sources.join("\n");
+    import_from_python_source(&combined, target_class)
+}
+
+fn collect_py_files(
+    dir: &std::path::Path,
+    out: &mut Vec<std::path::PathBuf>,
+) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read directory '{}': {e}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Directory entry error in '{}': {e}", dir.display()))?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if path.is_dir() {
+            if name.starts_with('.')
+                || matches!(name, "target" | "__pycache__" | ".venv" | "node_modules" | ".git")
+            {
+                continue;
+            }
+            collect_py_files(&path, out)?;
+        } else if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("py") {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
 /// Scans source lines and extracts all `nn.Module` class declarations with their layers and forward dataflow.
 pub fn extract_module_classes(source: &str) -> Result<Vec<ExtractedModuleClass>, String> {
     let mut classes = Vec::new();
