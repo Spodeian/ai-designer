@@ -1,6 +1,7 @@
 //! Multi-Backend Code & Project Generator: PyTorch 2, JAX/Equinox, Rust Candle, and Fused Hardware Kernels.
 
 pub mod candle_gen;
+pub mod edge_gen;
 pub mod harness_gen;
 pub mod jax_gen;
 pub mod kernel_gen;
@@ -13,6 +14,7 @@ use std::path::Path;
 use crate::spec::AiDesignSpec;
 
 pub use candle_gen::*;
+pub use edge_gen::*;
 pub use harness_gen::*;
 pub use jax_gen::*;
 pub use kernel_gen::*;
@@ -81,6 +83,11 @@ pub fn generate_all_backends(spec: &AiDesignSpec) -> ProjectBundle {
     // 5. Cross-Backend Parity & Benchmark Harness
     let harness_py = generate_verification_harness(spec);
     bundle.insert("verify_and_bench.py".to_string(), harness_py);
+
+    // 6. Edge Targets (MLX, Core ML, TFLite/LiteRT, ExecuTorch)
+    for (name, content) in generate_edge_targets(spec) {
+        bundle.insert(name, content);
+    }
 
     bundle
 }
