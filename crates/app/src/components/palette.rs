@@ -817,9 +817,11 @@ impl PaletteView {
 
     fn render_catalog_tab(&mut self, ui: &mut Ui, state: &mut StudioState) {
         ui.label(
-            RichText::new("Click any category or topic to open its embedded AI Designer reference:")
-                .size(11.0)
-                .color(Color32::from_rgb(175, 185, 200)),
+            RichText::new(
+                "Click any category or topic to open its embedded AI Designer reference:",
+            )
+            .size(11.0)
+            .color(Color32::from_rgb(175, 185, 200)),
         );
         ui.add_space(4.0);
 
@@ -881,7 +883,10 @@ impl PaletteView {
                                     .color(Color32::from_rgb(140, 215, 185)),
                                 &topic_url,
                             )
-                            .on_hover_text(format!("Open '{topic}' in AI Designer curriculum ({})", cat.id));
+                            .on_hover_text(format!(
+                                "Open '{topic}' in AI Designer curriculum ({})",
+                                cat.id
+                            ));
                         }
                     });
 

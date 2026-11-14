@@ -21,7 +21,8 @@ pub fn export_spec_to_svg(spec: &AiDesignSpec) -> String {
     let card_h = 68usize;
     let gap_x = 40usize;
     let pad_x = 32usize;
-    let item_count = spec.inputs.len() + render_count + usize::from(truncated > 0) + spec.outputs.len();
+    let item_count =
+        spec.inputs.len() + render_count + usize::from(truncated > 0) + spec.outputs.len();
     let total_w = (pad_x * 2 + item_count * (card_w + gap_x)).max(420);
     let total_h = 180usize;
 

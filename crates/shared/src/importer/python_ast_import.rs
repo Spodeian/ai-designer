@@ -61,7 +61,10 @@ pub fn import_from_python_directory(
     target_class: Option<&str>,
 ) -> Result<AiDesignSpec, String> {
     if !root.is_dir() {
-        return Err(format!("Python directory does not exist: {}", root.display()));
+        return Err(format!(
+            "Python directory does not exist: {}",
+            root.display()
+        ));
     }
 
     let mut files = Vec::new();
@@ -128,13 +131,17 @@ fn collect_files_with_extensions(
     let entries = std::fs::read_dir(dir)
         .map_err(|e| format!("Failed to read directory '{}': {e}", dir.display()))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Directory entry error in '{}': {e}", dir.display()))?;
+        let entry =
+            entry.map_err(|e| format!("Directory entry error in '{}': {e}", dir.display()))?;
         let path = entry.path();
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
         if path.is_dir() {
-            if matches!(name, ".git" | "target" | "__pycache__" | ".venv" | "venv" | "node_modules") {
+            if matches!(
+                name,
+                ".git" | "target" | "__pycache__" | ".venv" | "venv" | "node_modules"
+            ) {
                 continue;
             }
             collect_files_with_extensions(&path, extensions, out)?;
@@ -142,7 +149,11 @@ fn collect_files_with_extensions(
             || path
                 .extension()
                 .and_then(|e| e.to_str())
-                .is_some_and(|ext| extensions.iter().any(|allowed| allowed.eq_ignore_ascii_case(ext)))
+                .is_some_and(|ext| {
+                    extensions
+                        .iter()
+                        .any(|allowed| allowed.eq_ignore_ascii_case(ext))
+                })
         {
             out.push(path);
         }
@@ -157,14 +168,18 @@ fn collect_py_files(
     let entries = std::fs::read_dir(dir)
         .map_err(|e| format!("Failed to read directory '{}': {e}", dir.display()))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Directory entry error in '{}': {e}", dir.display()))?;
+        let entry =
+            entry.map_err(|e| format!("Directory entry error in '{}': {e}", dir.display()))?;
         let path = entry.path();
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
         if path.is_dir() {
             if name.starts_with('.')
-                || matches!(name, "target" | "__pycache__" | ".venv" | "node_modules" | ".git")
+                || matches!(
+                    name,
+                    "target" | "__pycache__" | ".venv" | "node_modules" | ".git"
+                )
             {
                 continue;
             }
@@ -686,7 +701,8 @@ class GatedResMLP(nn.Module):
         std::fs::write(sub.join("layer.py"), "class M: pass\n").expect("write py");
         std::fs::write(sub.join("notes.txt"), "skip me\n").expect("write txt");
 
-        let bundle = ingest_directory_tree(&dir, &["py"]).expect("ingest_directory_tree should work");
+        let bundle =
+            ingest_directory_tree(&dir, &["py"]).expect("ingest_directory_tree should work");
         assert!(bundle.contains("=== DIRECTORY TREE ==="));
         assert!(bundle.contains("nested/layer.py"));
         assert!(bundle.contains("=== FILE: nested/layer.py ==="));

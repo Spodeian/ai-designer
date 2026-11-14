@@ -116,8 +116,8 @@ pub fn generate_pareto_frontier(
 }
 
 use spodeian_stats::{
-    exact_non_dominated_indices, is_strict_pareto_frontier, select_utopia_knee_index,
-    ObjectiveDirection,
+    ObjectiveDirection, exact_non_dominated_indices, is_strict_pareto_frontier,
+    select_utopia_knee_index,
 };
 
 /// Result of a deep multi-scale, multi-precision Pareto sweep.
@@ -191,7 +191,8 @@ pub fn generate_precision_pareto_frontier(
         .collect();
 
     let nd_indices = exact_non_dominated_indices(&objectives, &directions);
-    let mut frontier: Vec<ParetoCandidate> = nd_indices.into_iter().map(|i| pool[i].clone()).collect();
+    let mut frontier: Vec<ParetoCandidate> =
+        nd_indices.into_iter().map(|i| pool[i].clone()).collect();
     frontier.sort_by_key(|c| c.total_param_count);
 
     let frontier_objectives: Vec<Vec<f64>> = frontier
@@ -432,7 +433,13 @@ mod tests {
         let objs: Vec<Vec<f64>> = report
             .frontier
             .iter()
-            .map(|c| vec![c.total_param_count as f64, c.latency_ms, c.vram_bytes as f64])
+            .map(|c| {
+                vec![
+                    c.total_param_count as f64,
+                    c.latency_ms,
+                    c.vram_bytes as f64,
+                ]
+            })
             .collect();
         assert!(is_strict_pareto_frontier(&objs, &dirs));
     }

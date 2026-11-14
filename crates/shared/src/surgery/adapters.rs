@@ -41,12 +41,18 @@ pub struct AdapterSurgeryPlan {
 
 fn estimate_operator_width(op: &OperatorKind) -> (usize, bool) {
     match op {
-        OperatorKind::MHA { num_heads, d_k, .. } => ((*num_heads).saturating_mul(*d_k).max(64), true),
+        OperatorKind::MHA { num_heads, d_k, .. } => {
+            ((*num_heads).saturating_mul(*d_k).max(64), true)
+        }
         OperatorKind::GQA {
             num_q_heads, d_k, ..
         } => ((*num_q_heads).saturating_mul(*d_k).max(64), true),
-        OperatorKind::MLA { num_heads, d_v, .. } => ((*num_heads).saturating_mul(*d_v).max(64), true),
-        OperatorKind::DiffAttn { num_heads, d_k } => ((*num_heads).saturating_mul(*d_k).max(64), true),
+        OperatorKind::MLA { num_heads, d_v, .. } => {
+            ((*num_heads).saturating_mul(*d_v).max(64), true)
+        }
+        OperatorKind::DiffAttn { num_heads, d_k } => {
+            ((*num_heads).saturating_mul(*d_k).max(64), true)
+        }
         OperatorKind::LinearAttention { num_heads, d_k, .. } => {
             ((*num_heads).saturating_mul(*d_k).max(64), true)
         }

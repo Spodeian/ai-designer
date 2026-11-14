@@ -6,8 +6,8 @@
 
 use crate::spec::{
     ActivationKind, AiDesignSpec, ConnectionSpec, CoordinateEncoding, InputPortSpec, LossPairing,
-    NodeSpec, NormalizerSpec, OperatorKind, OutputPortSpec, PrecisionFormat,
-    StructuralConstraint, SymbolicDim, TensorSpace, WiringPattern,
+    NodeSpec, NormalizerSpec, OperatorKind, OutputPortSpec, PrecisionFormat, StructuralConstraint,
+    SymbolicDim, TensorSpace, WiringPattern,
 };
 use serde_json::Value;
 
@@ -55,10 +55,7 @@ fn import_onnx_json(root: &Value, graph: &Value) -> Result<AiDesignSpec, String>
             .or_else(|| node.get("op"))
             .and_then(|v| v.as_str())
             .unwrap_or("Linear");
-        let name = node
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or(op_type);
+        let name = node.get("name").and_then(|v| v.as_str()).unwrap_or(op_type);
         let in_dim = extract_dim_hint(node, &["in_features", "in_channels", "dim"], default_dim);
         let out_dim = extract_dim_hint(
             node,
@@ -66,7 +63,13 @@ fn import_onnx_json(root: &Value, graph: &Value) -> Result<AiDesignSpec, String>
             in_dim,
         );
         let heads = extract_dim_hint(node, &["num_heads", "heads"], 8);
-        (name.to_string(), op_type.to_string(), in_dim, out_dim, heads)
+        (
+            name.to_string(),
+            op_type.to_string(),
+            in_dim,
+            out_dim,
+            heads,
+        )
     })
 }
 
@@ -101,10 +104,7 @@ fn import_torch_export_json(root: &Value, gm: &Value) -> Result<AiDesignSpec, St
                 .or_else(|| node.get("op"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("Linear");
-            let name = node
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or(target);
+            let name = node.get("name").and_then(|v| v.as_str()).unwrap_or(target);
             let in_dim =
                 extract_dim_hint(node, &["in_features", "in_channels", "dim"], default_dim);
             let out_dim = extract_dim_hint(
@@ -113,13 +113,7 @@ fn import_torch_export_json(root: &Value, gm: &Value) -> Result<AiDesignSpec, St
                 in_dim,
             );
             let heads = extract_dim_hint(node, &["num_heads", "heads"], 8);
-            (
-                name.to_string(),
-                target.to_string(),
-                in_dim,
-                out_dim,
-                heads,
-            )
+            (name.to_string(), target.to_string(), in_dim, out_dim, heads)
         },
     )
 }

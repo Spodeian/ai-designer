@@ -179,10 +179,7 @@ fn test_import_from_python_directory_skips_ignored_dirs() {
     assert_eq!(spec.metadata.model_id, "main_net");
     assert_eq!(spec.graph.nodes.len(), 2);
 
-    let err = shared::importer::import_from_python_directory(
-        &root.0,
-        Some("IgnoredCacheNet"),
-    )
-    .expect_err("ignored __pycache__ directory must not be scanned");
+    let err = shared::importer::import_from_python_directory(&root.0, Some("IgnoredCacheNet"))
+        .expect_err("ignored __pycache__ directory must not be scanned");
     assert!(err.contains("IgnoredCacheNet"));
 }

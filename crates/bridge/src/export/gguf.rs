@@ -60,10 +60,26 @@ pub fn serialize_spec_to_gguf_bytes(spec: &AiDesignSpec) -> Result<Vec<u8>, Stri
     push_kv_str(&mut out, "general.architecture", arch)?;
     push_kv_str(&mut out, "general.name", &spec.metadata.model_id)?;
     push_kv_u32(&mut out, "general.alignment", GGUF_DEFAULT_ALIGNMENT as u32)?;
-    push_kv_u32(&mut out, &format!("{arch}.context_length"), meta.context_length as u32)?;
-    push_kv_u32(&mut out, &format!("{arch}.embedding_length"), meta.embedding_length as u32)?;
-    push_kv_u32(&mut out, &format!("{arch}.block_count"), meta.block_count as u32)?;
-    push_kv_u32(&mut out, &format!("{arch}.attention.head_count"), meta.head_count as u32)?;
+    push_kv_u32(
+        &mut out,
+        &format!("{arch}.context_length"),
+        meta.context_length as u32,
+    )?;
+    push_kv_u32(
+        &mut out,
+        &format!("{arch}.embedding_length"),
+        meta.embedding_length as u32,
+    )?;
+    push_kv_u32(
+        &mut out,
+        &format!("{arch}.block_count"),
+        meta.block_count as u32,
+    )?;
+    push_kv_u32(
+        &mut out,
+        &format!("{arch}.attention.head_count"),
+        meta.head_count as u32,
+    )?;
     push_kv_u32(
         &mut out,
         &format!("{arch}.attention.head_count_kv"),
@@ -312,6 +328,10 @@ mod tests {
 
         assert_eq!(parsed.version, GGUF_VERSION);
         assert_eq!(parsed.architecture(), Some("llama"));
-        assert!(parsed.tensors.contains_key("ai_designer.arch_signature.weight"));
+        assert!(
+            parsed
+                .tensors
+                .contains_key("ai_designer.arch_signature.weight")
+        );
     }
 }

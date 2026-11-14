@@ -199,7 +199,9 @@ impl ContinuousIntegratorKind {
             Self::Midpoint => "Explicit Midpoint (2nd Order)",
             Self::Rk4 => "Runge-Kutta 4 (Classical RK4)",
             Self::Tsit5 => "Tsitouras 5(4) Adaptive RK (Tsit5)",
-            Self::SelfOptimizingMetaIntegrator => "SelfOptimizingMetaIntegrator (Adaptive Phase & Step)",
+            Self::SelfOptimizingMetaIntegrator => {
+                "SelfOptimizingMetaIntegrator (Adaptive Phase & Step)"
+            }
         }
     }
 
