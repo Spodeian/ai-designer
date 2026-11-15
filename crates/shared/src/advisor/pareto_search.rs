@@ -115,6 +115,106 @@ pub fn generate_pareto_frontier(
     candidates
 }
 
+use spodeian_stats::{
+    ObjectiveDirection, exact_non_dominated_indices, is_strict_pareto_frontier,
+    select_utopia_knee_index,
+};
+
+/// Result of a deep multi-scale, multi-precision Pareto sweep.
+#[derive(Debug, Clone)]
+pub struct PrecisionParetoReport {
+    pub evaluated_count: usize,
+    pub frontier: Vec<ParetoCandidate>,
+    pub knee_index: Option<usize>,
+}
+
+/// Evaluates a fine-grained architecture & precision grid and filters strictly
+/// non-dominated solutions across `(Maximize(params), Minimize(latency_ms), Minimize(vram_bytes))`.
+pub fn generate_precision_pareto_frontier(
+    base_spec: &AiDesignSpec,
+    target_hardware: Option<&HardwareTargetProfile>,
+) -> PrecisionParetoReport {
+    let hw = target_hardware
+        .cloned()
+        .unwrap_or_else(|| base_spec.metadata.target_hardware.clone());
+
+    const SCALES: [f64; 11] = [
+        0.35, 0.50, 0.65, 0.80, 0.90, 1.00, 1.15, 1.30, 1.50, 1.75, 2.00,
+    ];
+    const PRECISIONS: [PrecisionFormat; 3] = [
+        PrecisionFormat::FP8E4M3FN,
+        PrecisionFormat::BF16,
+        PrecisionFormat::FP16,
+    ];
+
+    let mut evaluated = Vec::with_capacity(SCALES.len() * PRECISIONS.len());
+    for &scale in &SCALES {
+        for &prec in &PRECISIONS {
+            let tag = format!("s{:.2}_{:?}", scale, prec);
+            let spec = mutate_architecture(base_spec, &hw, scale, prec, &tag);
+            let candidate = evaluate_candidate(
+                &format!("{scale:.2}x {prec:?}"),
+                &format!("Scale {scale:.2}x at {prec:?} precision"),
+                spec,
+                &hw,
+            );
+            evaluated.push(candidate);
+        }
+    }
+    let evaluated_count = evaluated.len();
+
+    let non_oom: Vec<ParetoCandidate> = evaluated
+        .iter()
+        .filter(|c| !c.is_oom_risk)
+        .cloned()
+        .collect();
+    let pool = if non_oom.is_empty() {
+        evaluated
+    } else {
+        non_oom
+    };
+
+    let directions = [
+        ObjectiveDirection::Maximize,
+        ObjectiveDirection::Minimize,
+        ObjectiveDirection::Minimize,
+    ];
+    let objectives: Vec<Vec<f64>> = pool
+        .iter()
+        .map(|c| {
+            vec![
+                c.total_param_count as f64,
+                c.latency_ms,
+                c.vram_bytes as f64,
+            ]
+        })
+        .collect();
+
+    let nd_indices = exact_non_dominated_indices(&objectives, &directions);
+    let mut frontier: Vec<ParetoCandidate> =
+        nd_indices.into_iter().map(|i| pool[i].clone()).collect();
+    frontier.sort_by_key(|c| c.total_param_count);
+
+    let frontier_objectives: Vec<Vec<f64>> = frontier
+        .iter()
+        .map(|c| {
+            vec![
+                c.total_param_count as f64,
+                c.latency_ms,
+                c.vram_bytes as f64,
+            ]
+        })
+        .collect();
+    debug_assert!(is_strict_pareto_frontier(&frontier_objectives, &directions));
+    let knee_index = select_utopia_knee_index(&frontier_objectives, &directions);
+
+    PrecisionParetoReport {
+        evaluated_count,
+        frontier,
+        knee_index,
+    }
+}
+
 fn mutate_architecture(
     base: &AiDesignSpec,
     hw: &HardwareTargetProfile,
@@ -267,5 +367,80 @@ mod tests {
         // Assert monotonic ordering in parameter capacity
         assert!(frontier[0].total_param_count < frontier[2].total_param_count);
         assert!(frontier[2].total_param_count < frontier[4].total_param_count);
+    }
+
+    #[test]
+    fn test_precision_pareto_frontier_is_strict_non_dominated() {
+        let mut spec = AiDesignSpec::new("toy_transformer", "Toy Transformer");
+        spec.inputs.push(InputPortSpec {
+            id: "x".to_string(),
+            name: "Input".to_string(),
+            space: TensorSpace::ContinuousVector {
+                dimension: 256,
+                range: None,
+            },
+            symbolic_shape: vec![SymbolicDim::from("B"), SymbolicDim::from(256)],
+            normalizer: NormalizerSpec::None,
+            coordinate_encoding: CoordinateEncoding::None,
+            patching: None,
+        });
+        spec.outputs.push(OutputPortSpec {
+            id: "y".to_string(),
+            name: "Output".to_string(),
+            space: TensorSpace::ContinuousVector {
+                dimension: 10,
+                range: None,
+            },
+            symbolic_shape: vec![SymbolicDim::from("B"), SymbolicDim::from(10)],
+            constraint: StructuralConstraint::DirectLinear,
+            loss: LossPairing::CrossEntropy,
+        });
+        spec.graph.nodes = vec![
+            NodeSpec {
+                id: "linear_1".to_string(),
+                name: "Dense 1".to_string(),
+                operator: OperatorKind::Linear {
+                    in_features: 256,
+                    out_features: 512,
+                    bias: true,
+                },
+                precision: Some(PrecisionFormat::BF16),
+                ..Default::default()
+            },
+            NodeSpec {
+                id: "linear_2".to_string(),
+                name: "Dense 2".to_string(),
+                operator: OperatorKind::Linear {
+                    in_features: 512,
+                    out_features: 10,
+                    bias: true,
+                },
+                precision: Some(PrecisionFormat::BF16),
+                ..Default::default()
+            },
+        ];
+
+        let report = generate_precision_pareto_frontier(&spec, None);
+        assert_eq!(report.evaluated_count, 33);
+        assert!(!report.frontier.is_empty());
+        assert!(report.knee_index.is_some());
+
+        let dirs = [
+            ObjectiveDirection::Maximize,
+            ObjectiveDirection::Minimize,
+            ObjectiveDirection::Minimize,
+        ];
+        let objs: Vec<Vec<f64>> = report
+            .frontier
+            .iter()
+            .map(|c| {
+                vec![
+                    c.total_param_count as f64,
+                    c.latency_ms,
+                    c.vram_bytes as f64,
+                ]
+            })
+            .collect();
+        assert!(is_strict_pareto_frontier(&objs, &dirs));
     }
 }

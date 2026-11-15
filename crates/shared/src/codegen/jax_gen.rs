@@ -130,8 +130,27 @@ def main():
     s.push_str(&sanitize_class_name(&spec.metadata.model_id));
     s.push_str("(mkey)\n\n");
 
-    s.push_str(&format!("    # Optax Optimizer with AdamW\n    tx = optax.chain(\n        optax.clip_by_global_norm(1.0),\n        optax.adamw(learning_rate={}, weight_decay={})\n    )\n",
-        spec.training.adamw.lr, spec.training.adamw.weight_decay));
+    match spec.training.optimizer_family {
+        crate::spec::training::OptimizerFamily::SelfOptimizingMeta => {
+            let meta = &spec.training.self_optimizing_meta;
+            s.push_str(&format!(
+                "    # Spodeian SelfOptimizingMeta (hypergrad_lr={}, integrator={})\n    tx = optax.chain(\n        optax.clip_by_global_norm({}),\n        optax.adamw(learning_rate={}, b1={}, b2={}, weight_decay={})\n    )\n",
+                meta.hypergrad_lr,
+                meta.integrator.label(),
+                meta.trust_region_clip,
+                meta.lr,
+                meta.beta1,
+                meta.beta2,
+                meta.weight_decay
+            ));
+        }
+        _ => {
+            s.push_str(&format!(
+                "    # Optax Optimizer with AdamW\n    tx = optax.chain(\n        optax.clip_by_global_norm(1.0),\n        optax.adamw(learning_rate={}, weight_decay={})\n    )\n",
+                spec.training.adamw.lr, spec.training.adamw.weight_decay
+            ));
+        }
+    }
 
     s.push_str(
         r#"    opt_state = tx.init(eqx.filter(model, eqx.is_array))

@@ -54,6 +54,143 @@ pub fn import_from_python_source(
     synthesize_spec_from_class(target)
 }
 
+/// Recursively collects UTF-8 `.py` files under `root` in deterministic lexicographical path order,
+/// concatenates them, and reverse-engineers a PyTorch `nn.Module` into an `AiDesignSpec`.
+pub fn import_from_python_directory(
+    root: &std::path::Path,
+    target_class: Option<&str>,
+) -> Result<AiDesignSpec, String> {
+    if !root.is_dir() {
+        return Err(format!(
+            "Python directory does not exist: {}",
+            root.display()
+        ));
+    }
+
+    let mut files = Vec::new();
+    collect_py_files(root, &mut files)?;
+    files.sort();
+
+    let mut sources = Vec::new();
+    for path in files {
+        let bytes = std::fs::read(&path)
+            .map_err(|e| format!("Failed to read '{}': {e}", path.display()))?;
+        if let Ok(text) = String::from_utf8(bytes) {
+            sources.push(text);
+        }
+    }
+
+    if sources.is_empty() {
+        return Err(format!("No UTF-8 .py files found in '{}'", root.display()));
+    }
+
+    let combined = sources.join("\n");
+    import_from_python_source(&combined, target_class)
+}
+
+/// Builds a deterministic ASCII directory tree and concatenated UTF-8 source bundle
+/// (salvaged from `dir2txt`) for LLM context ingestion and workspace auditing.
+pub fn ingest_directory_tree(
+    root: &std::path::Path,
+    extensions: &[&str],
+) -> Result<String, String> {
+    if !root.is_dir() {
+        return Err(format!("Directory does not exist: {}", root.display()));
+    }
+
+    let mut files = Vec::new();
+    collect_files_with_extensions(root, extensions, &mut files)?;
+    files.sort();
+
+    let mut out = String::new();
+    out.push_str("=== DIRECTORY TREE ===\n");
+    for path in &files {
+        let rel = path.strip_prefix(root).unwrap_or(path);
+        out.push_str(&format!("  {}\n", rel.to_string_lossy().replace('\\', "/")));
+    }
+    out.push('\n');
+
+    for path in &files {
+        let rel = path.strip_prefix(root).unwrap_or(path);
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        if let Ok(bytes) = std::fs::read(path)
+            && let Ok(text) = String::from_utf8(bytes)
+        {
+            out.push_str(&format!("=== FILE: {rel_str} ===\n{text}\n\n"));
+        }
+    }
+
+    Ok(out)
+}
+
+fn collect_files_with_extensions(
+    dir: &std::path::Path,
+    extensions: &[&str],
+    out: &mut Vec<std::path::PathBuf>,
+) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read directory '{}': {e}", dir.display()))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| format!("Directory entry error in '{}': {e}", dir.display()))?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if path.is_dir() {
+            if matches!(
+                name,
+                ".git" | "target" | "__pycache__" | ".venv" | "venv" | "node_modules"
+            ) {
+                continue;
+            }
+            collect_files_with_extensions(&path, extensions, out)?;
+        } else if extensions.is_empty()
+            || path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|ext| {
+                    extensions
+                        .iter()
+                        .any(|allowed| allowed.eq_ignore_ascii_case(ext))
+                })
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn collect_py_files(
+    dir: &std::path::Path,
+    out: &mut Vec<std::path::PathBuf>,
+) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read directory '{}': {e}", dir.display()))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| format!("Directory entry error in '{}': {e}", dir.display()))?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if path.is_dir() {
+            if name.starts_with('.')
+                || matches!(
+                    name,
+                    "target" | "__pycache__" | ".venv" | "node_modules" | ".git"
+                )
+            {
+                continue;
+            }
+            collect_py_files(&path, out)?;
+        } else if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("py") {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
 /// Scans source lines and extracts all `nn.Module` class declarations with their layers and forward dataflow.
 pub fn extract_module_classes(source: &str) -> Result<Vec<ExtractedModuleClass>, String> {
     let mut classes = Vec::new();
@@ -554,5 +691,23 @@ class GatedResMLP(nn.Module):
                 bias: true
             }
         ));
+    }
+
+    #[test]
+    fn test_ingest_directory_tree_outputs_manifest_and_contents() {
+        let dir = std::env::temp_dir().join(format!("aid_dir2txt_{}", std::process::id()));
+        let sub = dir.join("nested");
+        std::fs::create_dir_all(&sub).expect("create temp test dir");
+        std::fs::write(sub.join("layer.py"), "class M: pass\n").expect("write py");
+        std::fs::write(sub.join("notes.txt"), "skip me\n").expect("write txt");
+
+        let bundle =
+            ingest_directory_tree(&dir, &["py"]).expect("ingest_directory_tree should work");
+        assert!(bundle.contains("=== DIRECTORY TREE ==="));
+        assert!(bundle.contains("nested/layer.py"));
+        assert!(bundle.contains("=== FILE: nested/layer.py ==="));
+        assert!(!bundle.contains("notes.txt"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

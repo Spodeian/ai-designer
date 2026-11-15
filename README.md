@@ -3,9 +3,9 @@
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE.md)
 [![Rust: 2024 Edition](https://img.shields.io/badge/Rust-2024%20Edition-orange.svg)](https://www.rust-lang.org)
 [![egui: 0.36](https://img.shields.io/badge/egui-0.36-blueviolet.svg)](https://github.com/emilk/egui)
-[![AI-Examples: 263 Topics](https://img.shields.io/badge/AI--Examples-18%20Categories%20%E2%80%A2%20263%20Topics-2ea44f)](../../README.md)
+[![Curriculum: 18 Categories • 263 Topics](https://img.shields.io/badge/Curriculum-18%20Categories%20%E2%80%A2%20263%20Topics-2ea44f)](docs/INDEX_BY_GOAL.md)
 
-**AI Designer Studio & Training Suite** (`tools/ai_designer/`) is the interactive visual architecture workbench and headless CLI compiler for the [`AI-Examples`](../../README.md) repository. Built in pure Rust with [`egui 0.36`](https://github.com/emilk/egui) / [`eframe 0.36`](https://docs.rs/eframe), it runs natively on **Desktop (Windows, macOS, Linux via Winit)**, in the **Browser (Serverless WebAssembly / PWA via Trunk)**, and as a **Headless CLI** for batch compilation, linting, Pareto optimization, and multi-format packaging.
+**AI Designer Studio & Training Suite** (`ai-designer`) is a self-contained visual architecture workbench and headless CLI compiler with embedded 18-category / 263-topic curriculum documentation ([`docs/INDEX_BY_GOAL.md`](docs/INDEX_BY_GOAL.md), [`docs/GLOSSARY_AND_NOTATION.md`](docs/GLOSSARY_AND_NOTATION.md)) and 59 starter blueprints ([`templates/`](templates/)). Built in pure Rust with [`egui 0.36`](https://github.com/emilk/egui) / [`eframe 0.36`](https://docs.rs/eframe), it runs natively on **Desktop (Windows, macOS, Linux via Winit)**, in the **Browser (Serverless WebAssembly / PWA via Trunk)**, and as a **Headless CLI** for batch compilation, linting, Pareto optimization, and multi-format packaging.
 
 ---
 
@@ -24,7 +24,7 @@ flowchart LR
 ### Stage ① — Scaffold (`① ✨ New / Wizard` or Left Palette)
 Choose how to initialize your model specification (`AiDesignSpec`):
 - **Guided Archetypes (9 Presets):** Select a domain archetype (*Language Transformer*, *Vision / Spatiotemporal*, *Physics / SciML Operator*, *Robotics Diffusion Policy*, *Time-Series Forecaster*, *Tabular Monotonic Network*, *Reversible / Looped Deliberation*, *Sparse Mixture-of-Experts*), customize `d_model`, `depth`, and execution precision, and scaffold a complete computation graph.
-- **Starter & Industry Blueprints (46 Pre-Engineered YAML Specs):** Load any of the 46 production blueprints in [`templates/`](templates/) — covering frontier industry architectures (DeepSeek-V3/R1, Flux.1/SD3 MMDiT, Llama-3.3/Qwen-2.5, Gemma-2/3, AlphaFold 3 Pairformer, V-JEPA/I-JEPA, Omnimodal Gemini Live/Moshi, OpenVLA/Pi0, ColPali, AlphaGenome/Enformer, GraphCast, 3D Gaussian Splatting), specialized ML paradigms (Recurrent-Depth TTT/Titans, DreamerV3 RSSM, Decision Transformer + DPO, RWKV-7 + Byte Latent Transformer, MatterGen Crystal Diffusion, Instant-NGP/SIREN NeRF, Liquid CfC, Neuromorphic Spiking LIF SNNs, Echo State & NG-RC Reservoirs, White-Box CRATE/DEQ/OptNet, Hyperbolic Poincaré Sheaf GFlowNets, Cryptographic zkML/CKKS, Quantum PQC-VQE, Photonic MZI & Memristive Crossbars), and all 18 [`AI-Examples`](../../README.md) categories — with one click.
+- **Starter & Industry Blueprints (59 Pre-Engineered YAML Specs):** Load any of the 59 production blueprints in [`templates/`](templates/) — covering frontier industry architectures (DeepSeek-V3/R1, Flux.1/SD3 MMDiT, Llama-3.3/Qwen-2.5, Gemma-2/3, AlphaFold 3 Pairformer, V-JEPA/I-JEPA, Omnimodal Gemini Live/Moshi, OpenVLA/Pi0, ColPali, AlphaGenome/Enformer, GraphCast, 3D Gaussian Splatting), specialized ML paradigms (Recurrent-Depth TTT/Titans, DreamerV3 RSSM, Decision Transformer + DPO, RWKV-7 + Byte Latent Transformer, MatterGen Crystal Diffusion, Instant-NGP/SIREN NeRF, Liquid CfC, Neuromorphic Spiking LIF SNNs, Echo State & NG-RC Reservoirs, White-Box CRATE/DEQ/OptNet, Hyperbolic Poincaré Sheaf GFlowNets, Cryptographic zkML/CKKS, Quantum PQC-VQE, Photonic MZI & Memristive Crossbars), and all 18 embedded curriculum categories — with one click.
 - **Blank Canvas:** Start from clean input (`x`) and output (`y`) ports, or click **`⚡ Auto-Architect Synthesis`** to automatically synthesize a backbone tailored to your declared I/O tensor spaces.
 
 ### Stage ② — Compose & Configure (`2. Compose: Graph | Outliner | YAML (.yaml)`)
@@ -34,9 +34,9 @@ Edit your architecture across three synchronized views that update in real time:
 - **Live Specification Source (`YAML (.yaml)`):** Direct `.yaml` specification editor with syntax validation and instant AST synchronization.
 - **Left Sidebar (`Operator & Topic Catalog`):**
   - **Multi-Axis Layer Filters:** Filter 55 operators by text search, **Functional Category** (*Attention & Memory*, *State Space & Recurrent*, *Feedforward & Splines*, *Spectral & Physics*, *Norms & Activations*, *Routing & MoE*), and **Computational Paradigm / Complexity** (*Linear O(T) Sequence*, *KV-Compressed Attention*, *Quadratic / Global Mixing*, *Physics & Geometric*, *Sparse / Conditional*, *Dense Projection*, *Shape-Preserving*, *Optimization-as-Architecture*).
-  - **Clickable Curriculum Links:** Every operator row, category header, and topic chip in the 18-category `AI-Examples` catalog links directly to its reference documentation.
+  - **Embedded Curriculum Links:** Every operator row, category header, and topic chip in the 18-category curriculum catalog maps to the embedded guide in [`docs/INDEX_BY_GOAL.md`](docs/INDEX_BY_GOAL.md).
 - **Right Sidebar (`Layer & Blueprint Inspector`):**
-  - **When a Layer is Selected:** Shows a clickable `AI-Examples` curriculum topic link, layer order controls (`Move Up`, `Move Down`, `Duplicate`, `Delete`), the **27-Format Numeric & Precision Lattice** selector, full operator-specific hyperparameters, and a bottom **"Node Overview & Architecture Guide"** card explaining *what the layer does*, *what it is typically used for*, *what usually follows it*, and one-click buttons to append recommended successor layers.
+  - **When a Layer is Selected:** Shows an embedded curriculum topic reference, layer order controls (`Move Up`, `Move Down`, `Duplicate`, `Delete`), the **27-Format Numeric & Precision Lattice** selector, full operator-specific hyperparameters, and a bottom **"Node Overview & Architecture Guide"** card explaining *what the layer does*, *what it is typically used for*, *what usually follows it*, and one-click buttons to append recommended successor layers.
   - **When No Layer is Selected (or when an Input/Output Card is Clicked):** Configures model metadata, **Target Hardware Profile** (with `Auto-Detect Host`), **Muon 2D + AdamW 1D Parameter Partitioning**, **Gradient Hygiene** (`AutoClip`, `Grokfast`, `Activation Checkpointing`), **Macro Wiring Topology**, **Input Port Normalization & Coordinate Encoding**, and **Output Loss & Structural Constraints**.
 
 ### Stage ③ — Diagnose & Optimize (Bottom Dock: `⚡ Advisor`, `📊 Roofline`, `📈 Pareto`)
@@ -155,7 +155,7 @@ The standalone `aid` binary executes instantly with zero graphics initialization
 | **`package`** | `aid package dit.yaml --weights model.safetensors -o model.aidpkg` | Bundles specification and weights into a 64-byte page-aligned `.aidpkg`, `.pkg`, or `.tar.gz` archive. |
 | **`unpack`** | `aid unpack model.aidpkg -o extracted/` | Extracts blueprints, manifest, and weights from `.aidpkg`, `.pkg`, or `.tar.gz`. |
 | **`hardware`** | `aid hardware` | Probes host CPU cores, OS, architecture, and live GPU specs via `nvidia-smi`. |
-| **`catalog`** | `aid catalog` | Lists all 18 `AI-Examples` curriculum categories and their representative topics. |
+| **`catalog`** | `aid catalog` | Lists all 18 embedded `AI Designer` curriculum categories and their representative topics. |
 | **`audit`** | `aid audit ../../pytorch2` | Audits repository PyTorch 2 modules and summarizes operator AST coverage. |
 
 ---

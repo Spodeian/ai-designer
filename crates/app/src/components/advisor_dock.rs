@@ -115,7 +115,7 @@ impl AdvisorDockView {
                                     &ref_url,
                                 )
                                 .on_hover_text(format!(
-                                    "Open AI-Examples curriculum reference: {ref_url}"
+                                    "Open embedded AI Designer curriculum reference: {ref_url}"
                                 ));
                             },
                         );

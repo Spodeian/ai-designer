@@ -5,9 +5,11 @@
 //! and Frankenmerge layer grafting.
 
 pub mod abliteration;
+pub mod adapters;
 pub mod grafting;
 pub mod soups;
 
 pub use abliteration::*;
+pub use adapters::*;
 pub use grafting::*;
 pub use soups::*;

@@ -1,4 +1,4 @@
-//! AI-Examples Repository Topic Catalog: indexes the 18 categories and key architectural archetypes across the codebase.
+//! Embedded Curriculum Topic Catalog: indexes the 18 categories and key architectural archetypes bundled in AI Designer.
 
 use serde::Serialize;
 
@@ -253,10 +253,10 @@ pub fn list_category_names() -> Vec<&'static str> {
 }
 
 impl TopicCategory {
-    /// Clickable URL to the category directory in the AI-Examples repository.
+    /// Clickable URL to the curated curriculum index in the ai-designer repository.
     pub fn category_url(&self) -> String {
         format!(
-            "https://github.com/Spodeian/AI-Examples/tree/main/notebooks/{}",
+            "https://github.com/Spodeian/ai-designer/blob/main/docs/INDEX_BY_GOAL.md#{}",
             self.id
         )
     }
@@ -264,8 +264,21 @@ impl TopicCategory {
     /// Clickable URL to search or view a specific representative topic in the repository.
     pub fn topic_url(&self, topic: &str) -> String {
         format!(
-            "https://github.com/Spodeian/AI-Examples/search?q={}+path%3Amarkdown/{}",
+            "https://github.com/Spodeian/ai-designer/search?q={}+{}",
             topic, self.id
         )
     }
+}
+
+/// Metadata descriptor for a synchronized curriculum topic across tracks.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TopicMetadata {
+    pub category: String,
+    pub slug: String,
+    pub title: String,
+    pub d_model: usize,
+    pub seq_len: usize,
+    pub parameter_count: usize,
+    pub memory_bound: bool,
+    pub parity_tolerance: f64,
 }

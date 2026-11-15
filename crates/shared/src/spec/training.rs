@@ -172,6 +172,101 @@ fn default_lbfgs_tolerance() -> f64 {
     1e-7
 }
 
+/// Continuous ODE / symplectic flow integrator kernel from `sml-runtime`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ContinuousIntegratorKind {
+    Euler,
+    Midpoint,
+    Rk4,
+    Tsit5,
+    #[default]
+    SelfOptimizingMetaIntegrator,
+}
+
+impl ContinuousIntegratorKind {
+    pub const ALL: &'static [ContinuousIntegratorKind] = &[
+        Self::Euler,
+        Self::Midpoint,
+        Self::Rk4,
+        Self::Tsit5,
+        Self::SelfOptimizingMetaIntegrator,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Euler => "Explicit Euler (1st Order)",
+            Self::Midpoint => "Explicit Midpoint (2nd Order)",
+            Self::Rk4 => "Runge-Kutta 4 (Classical RK4)",
+            Self::Tsit5 => "Tsitouras 5(4) Adaptive RK (Tsit5)",
+            Self::SelfOptimizingMetaIntegrator => {
+                "SelfOptimizingMetaIntegrator (Adaptive Phase & Step)"
+            }
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::Euler => "Fixed-step 1st-order explicit Euler integrator.",
+            Self::Midpoint => "Fixed-step 2nd-order explicit midpoint integrator.",
+            Self::Rk4 => "Classical 4-stage 4th-order Runge-Kutta integrator.",
+            Self::Tsit5 => "7-stage FSAL 5th-order Tsitouras embedded Runge-Kutta solver.",
+            Self::SelfOptimizingMetaIntegrator => {
+                "Spodeian Core dynamic meta-integrator combining predictive residual adaptation, trust-region step clamping, and phase-accurate history states."
+            }
+        }
+    }
+}
+
+/// Configuration for Spodeian Core `SelfOptimizingMeta` hypergradient + continuous meta-integrator.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SelfOptimizingMetaConfig {
+    #[serde(default = "default_meta_lr")]
+    pub lr: f64,
+    #[serde(default = "default_meta_beta1")]
+    pub beta1: f64,
+    #[serde(default = "default_meta_beta2")]
+    pub beta2: f64,
+    #[serde(default = "default_weight_decay")]
+    pub weight_decay: f64,
+    #[serde(default = "default_hypergrad_lr")]
+    pub hypergrad_lr: f64,
+    #[serde(default = "default_trust_region_clip")]
+    pub trust_region_clip: f64,
+    #[serde(default)]
+    pub integrator: ContinuousIntegratorKind,
+}
+
+impl Default for SelfOptimizingMetaConfig {
+    fn default() -> Self {
+        Self {
+            lr: default_meta_lr(),
+            beta1: default_meta_beta1(),
+            beta2: default_meta_beta2(),
+            weight_decay: default_weight_decay(),
+            hypergrad_lr: default_hypergrad_lr(),
+            trust_region_clip: default_trust_region_clip(),
+            integrator: ContinuousIntegratorKind::default(),
+        }
+    }
+}
+
+fn default_meta_lr() -> f64 {
+    0.001
+}
+fn default_meta_beta1() -> f64 {
+    0.9
+}
+fn default_meta_beta2() -> f64 {
+    0.999
+}
+fn default_hypergrad_lr() -> f64 {
+    0.05
+}
+fn default_trust_region_clip() -> f64 {
+    1.0
+}
+
 /// Primary optimizer algorithm family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -186,6 +281,7 @@ pub enum OptimizerFamily {
     ScheduleFreeAdamW,
     PagedAdamW8Bit,
     SGDWithNesterov,
+    SelfOptimizingMeta,
 }
 
 impl OptimizerFamily {
@@ -199,6 +295,7 @@ impl OptimizerFamily {
         Self::ScheduleFreeAdamW,
         Self::PagedAdamW8Bit,
         Self::SGDWithNesterov,
+        Self::SelfOptimizingMeta,
     ];
 
     pub fn label(&self) -> &'static str {
@@ -212,6 +309,7 @@ impl OptimizerFamily {
             Self::ScheduleFreeAdamW => "Schedule-Free AdamW (FAIR — No Decay Schedule Tuning)",
             Self::PagedAdamW8Bit => "Paged 8-bit AdamW (bitsandbytes Blockwise Quantization)",
             Self::SGDWithNesterov => "SGD + Nesterov Momentum (Vision & Robotics)",
+            Self::SelfOptimizingMeta => "SelfOptimizingMeta (Hypergradient + Meta-Integrator)",
         }
     }
 
@@ -243,6 +341,9 @@ impl OptimizerFamily {
             }
             Self::SGDWithNesterov => {
                 "Classic Stochastic Gradient Descent with Nesterov accelerated momentum, preferred for high-generalization computer vision and reinforcement learning."
+            }
+            Self::SelfOptimizingMeta => {
+                "Spodeian Core closed-loop hypergradient optimizer paired with SelfOptimizingMetaIntegrator for continuous-depth flows, PINNs, and adaptive-step training."
             }
         }
     }
@@ -879,6 +980,8 @@ pub struct TrainingSpec {
     #[serde(default)]
     pub lbfgs: LbfgsConfig,
     #[serde(default)]
+    pub self_optimizing_meta: SelfOptimizingMetaConfig,
+    #[serde(default)]
     pub scheduler: SchedulerSpec,
     #[serde(default)]
     pub hygiene: GradientHygieneSpec,
@@ -907,6 +1010,7 @@ impl Default for TrainingSpec {
             lion: LionConfig::default(),
             sophia: SophiaConfig::default(),
             lbfgs: LbfgsConfig::default(),
+            self_optimizing_meta: SelfOptimizingMetaConfig::default(),
             scheduler: SchedulerSpec::default(),
             hygiene: GradientHygieneSpec::default(),
             loss_balancing: LossBalancingStrategy::default(),

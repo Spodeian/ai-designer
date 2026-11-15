@@ -1080,6 +1080,70 @@ def build_optimizers(model):
                 spec.training.adamw.weight_decay, spec.training.adamw.lr, spec.training.adamw.betas.0, spec.training.adamw.betas.1, spec.training.adamw.eps
             ));
         }
+        crate::spec::training::OptimizerFamily::SelfOptimizingMeta => {
+            let meta = &spec.training.self_optimizing_meta;
+            s.push_str(&format!(
+                r#"class SelfOptimizingMeta(torch.optim.Optimizer):
+    """Spodeian Core SelfOptimizingMeta: closed-loop hypergradient adaptation paired with {integrator}."""
+    def __init__(self, params, lr: float = {lr}, betas=({b1:.3}, {b2:.3}), weight_decay: float = {wd}, hypergrad_lr: float = {hlr}, trust_region_clip: float = {clip}, eps: float = 1e-8):
+        defaults = dict(lr=lr, betas=betas, weight_decay=weight_decay, hypergrad_lr=hypergrad_lr, trust_region_clip=trust_region_clip, eps=eps)
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+        for group in self.param_groups:
+            beta1, beta2 = group['betas']
+            wd = group['weight_decay']
+            hlr = group['hypergrad_lr']
+            clip = group['trust_region_clip']
+            eps = group['eps']
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                g = p.grad
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['m'] = torch.zeros_like(p)
+                    state['v'] = torch.zeros_like(p)
+                    state['prev_update'] = torch.zeros_like(p)
+                    state['meta_lr'] = group['lr']
+                state['step'] += 1
+                m, v, prev_u = state['m'], state['v'], state['prev_update']
+                meta_lr = state['meta_lr']
+                # Hypergradient alignment update
+                hgrad = torch.sum(g * prev_u).item()
+                meta_lr = max(1e-7, min(0.5, meta_lr - hlr * meta_lr * hgrad))
+                state['meta_lr'] = meta_lr
+                if wd != 0.0:
+                    p.mul_(1.0 - meta_lr * wd)
+                m.mul_(beta1).add_(g, alpha=1.0 - beta1)
+                v.mul_(beta2).addcmul_(g, g, value=1.0 - beta2)
+                m_hat = m / (1.0 - beta1 ** state['step'])
+                v_hat = v / (1.0 - beta2 ** state['step'])
+                step_dir = torch.clamp(m_hat / (v_hat.sqrt() + eps), -clip, clip)
+                p.add_(step_dir, alpha=-meta_lr)
+                prev_u.copy_(step_dir)
+        return loss
+
+def build_optimizers(model):
+    opt = SelfOptimizingMeta(model.parameters(), lr={lr}, betas=({b1:.3}, {b2:.3}), weight_decay={wd}, hypergrad_lr={hlr}, trust_region_clip={clip})
+    return [opt]
+
+"#,
+                integrator = meta.integrator.label(),
+                lr = meta.lr,
+                b1 = meta.beta1,
+                b2 = meta.beta2,
+                wd = meta.weight_decay,
+                hlr = meta.hypergrad_lr,
+                clip = meta.trust_region_clip,
+            ));
+        }
         _ => {
             // Default: Muon + AdamW Partitioned
             s.push_str(
@@ -1348,5 +1412,43 @@ fn sanitize_class_name(raw: &str) -> String {
         "CustomAiModel".to_string()
     } else {
         s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::codegen::generate_all_backends;
+    use crate::spec::archetypes::{ArchitectureArchetype, scaffold_archetype};
+    use crate::spec::precision::PrecisionFormat;
+    use crate::spec::training::OptimizerFamily;
+
+    #[test]
+    fn test_self_optimizing_meta_codegen_across_backends() {
+        let mut spec = scaffold_archetype(
+            ArchitectureArchetype::GenerativeLLM,
+            "meta_opt_llm",
+            "Meta Optimizer LLM",
+            256,
+            2,
+            PrecisionFormat::BF16,
+        );
+        spec.training.optimizer_family = OptimizerFamily::SelfOptimizingMeta;
+
+        let bundle = generate_all_backends(&spec);
+        let pytorch_train = bundle
+            .files
+            .get("pytorch/train.py")
+            .expect("pytorch/train.py");
+        assert!(pytorch_train.contains("class SelfOptimizingMeta"));
+        assert!(pytorch_train.contains("SelfOptimizingMetaIntegrator"));
+
+        let jax_train = bundle.files.get("jax/train.py").expect("jax/train.py");
+        assert!(jax_train.contains("SelfOptimizingMeta"));
+
+        let candle_infer = bundle
+            .files
+            .get("candle/examples/infer.rs")
+            .expect("candle/examples/infer.rs");
+        assert!(candle_infer.contains("SelfOptimizingMeta"));
     }
 }

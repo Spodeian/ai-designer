@@ -151,6 +151,8 @@ fn default_version() -> String {
 }
 
 impl AiDesignSpec {
+    pub const SCHEMA_VERSION: &'static str = "2.0.0";
+
     pub fn new(model_id: &str, display_name: &str) -> Self {
         Self {
             aid_version: default_version(),
@@ -179,5 +181,129 @@ impl AiDesignSpec {
             return Err("Model computation graph must contain at least one node".to_string());
         }
         Ok(())
+    }
+
+    /// Returns the versioned JSON Schema (Draft 2020-12) for `AiDesignSpec`.
+    pub fn json_schema() -> serde_json::Value {
+        serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": format!("https://spodeian.com/schemas/ai-designer/{}/aid-spec.schema.json", Self::SCHEMA_VERSION),
+            "title": "AiDesignSpec",
+            "description": "Typed Neural & Scientific ML Architecture Specification for AI Designer Studio",
+            "schema_version": Self::SCHEMA_VERSION,
+            "type": "object",
+            "required": ["metadata", "inputs", "outputs", "graph"],
+            "properties": {
+                "aid_version": { "type": "string", "default": Self::SCHEMA_VERSION },
+                "metadata": {
+                    "type": "object",
+                    "required": ["model_id", "display_name"],
+                    "properties": {
+                        "model_id": { "type": "string" },
+                        "display_name": { "type": "string" },
+                        "domain": { "type": "string" },
+                        "author": { "type": "string" },
+                        "license": { "type": "string" },
+                        "target_hardware": { "type": "object" },
+                        "tags": { "type": "array", "items": { "type": "string" } }
+                    }
+                },
+                "inputs": { "type": "array", "minItems": 1 },
+                "outputs": { "type": "array", "minItems": 1 },
+                "graph": {
+                    "type": "object",
+                    "required": ["topology", "nodes"],
+                    "properties": {
+                        "topology": { "type": "object" },
+                        "nodes": { "type": "array", "minItems": 1 },
+                        "connections": { "type": "array" }
+                    }
+                },
+                "training": { "type": "object" },
+                "precision": { "type": "object" }
+            }
+        })
+    }
+
+    /// Parses JSON (including legacy v1 blueprints missing newer optional fields),
+    /// upgrades `aid_version` to `Self::SCHEMA_VERSION`, and validates the specification.
+    pub fn validate_and_migrate_json(raw: &str) -> Result<Self, String> {
+        let mut val: serde_json::Value =
+            serde_json::from_str(raw).map_err(|e| format!("Invalid JSON spec: {e}"))?;
+        let obj = val
+            .as_object_mut()
+            .ok_or_else(|| "AiDesignSpec JSON root must be an object".to_string())?;
+
+        // Migrate legacy `"version"` field if `"aid_version"` is omitted.
+        if !obj.contains_key("aid_version")
+            && let Some(v) = obj.remove("version")
+        {
+            obj.insert("aid_version".to_string(), v);
+        }
+        obj.entry("training".to_string()).or_insert_with(|| {
+            serde_json::to_value(TrainingSpec::default()).unwrap_or_else(|_| serde_json::json!({}))
+        });
+        obj.entry("precision".to_string()).or_insert_with(|| {
+            serde_json::to_value(NumericLatticeConfig::default())
+                .unwrap_or_else(|_| serde_json::json!({}))
+        });
+
+        let mut spec: Self = serde_json::from_value(val)
+            .map_err(|e| format!("AiDesignSpec deserialization failed: {e}"))?;
+        if spec.aid_version.is_empty() || spec.aid_version.starts_with("1.") {
+            spec.aid_version = Self::SCHEMA_VERSION.to_string();
+        }
+        spec.validate()?;
+        Ok(spec)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_json_schema_and_v1_migration() {
+        let schema = AiDesignSpec::json_schema();
+        assert_eq!(schema["title"], "AiDesignSpec");
+        assert_eq!(schema["schema_version"], AiDesignSpec::SCHEMA_VERSION);
+        assert_eq!(
+            schema["required"],
+            serde_json::json!(["metadata", "inputs", "outputs", "graph"])
+        );
+
+        let v1_json = serde_json::json!({
+            "version": "1.0.0",
+            "metadata": {
+                "model_id": "legacy_mlp",
+                "display_name": "Legacy MLP"
+            },
+            "inputs": [{
+                "id": "x",
+                "name": "Input",
+                "space": { "kind": "continuous_vector", "dimension": 64 },
+                "symbolic_shape": ["B", 64]
+            }],
+            "outputs": [{
+                "id": "y",
+                "name": "Output",
+                "space": { "kind": "continuous_vector", "dimension": 32 },
+                "symbolic_shape": ["B", 32]
+            }],
+            "graph": {
+                "topology": { "kind": "serial_stack" },
+                "nodes": [{
+                    "id": "proj",
+                    "name": "Projection",
+                    "operator": { "type": "linear", "in_features": 64, "out_features": 32, "bias": true }
+                }]
+            }
+        });
+
+        let migrated = AiDesignSpec::validate_and_migrate_json(&v1_json.to_string())
+            .expect("v1 migration should succeed");
+        assert_eq!(migrated.aid_version, AiDesignSpec::SCHEMA_VERSION);
+        assert_eq!(migrated.metadata.model_id, "legacy_mlp");
+        assert_eq!(migrated.graph.nodes.len(), 1);
     }
 }

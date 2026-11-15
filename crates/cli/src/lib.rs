@@ -476,7 +476,7 @@ Subcommands:
       Probes host CPU parallelism, OS, architecture, and live GPU specs via nvidia-smi.
 
   catalog
-      Lists the 18 architectural categories and representative topics in AI-Examples.
+      Lists the 18 embedded AI Designer curriculum architectural categories and representative topics.
 
   help, --help, -h
       Displays this manual.
@@ -917,7 +917,7 @@ pub fn print_hardware() {
 }
 
 pub fn print_catalog() {
-    println!("\n=== AI-Examples Architecture & Category Catalog (18 Categories) ===\n");
+    println!("\n=== AI Designer Architecture & Category Catalog (18 Categories) ===\n");
     for cat in REPO_CATEGORIES {
         println!("[{}] {}", cat.id, cat.name);
         println!("    Description : {}", cat.description);
@@ -1302,7 +1302,7 @@ pub fn cmd_audit(search_dir: &str) -> Result<(), String> {
     }
 
     println!("\n=============================================================================");
-    println!("  AI-EXAMPLES ARCHITECTURE COMPLIANCE & REPOSITORY AUDIT REPORT");
+    println!("  AI DESIGNER ARCHITECTURE COMPLIANCE & REPOSITORY AUDIT REPORT");
     println!("=============================================================================");
     println!("  Search Directory       : {}", search_dir);
     println!("  Models Audited         : {}", audited_count);
@@ -1536,9 +1536,12 @@ pub fn cmd_train_run(blueprint_path: &str, opts: TrainRunOptions<'_>) -> Result<
                 shared::spec::training::OptimizerFamily::PagedAdamW8Bit
             }
             "sgd" => shared::spec::training::OptimizerFamily::SGDWithNesterov,
+            "meta" | "self_optimizing_meta" | "self-optimizing-meta" => {
+                shared::spec::training::OptimizerFamily::SelfOptimizingMeta
+            }
             _ => {
                 return Err(format!(
-                    "Unknown optimizer family '{opt}'. Options: muon, adamw, lion, sophia, adan, lbfgs, schedule-free, paged8bit, sgd"
+                    "Unknown optimizer family '{opt}'. Options: muon, adamw, lion, sophia, adan, lbfgs, schedule-free, paged8bit, sgd, meta"
                 ));
             }
         };

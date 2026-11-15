@@ -1,7 +1,7 @@
-//! AI-Examples Starter Blueprint Gallery View.
+//! AI Designer Starter Blueprint Gallery View.
 //!
-//! Provides a searchable, categorized showcase of all 20 production starter blueprints
-//! spanning all 18 AI-Examples curriculum categories, with 1-click loading into the
+//! Provides a searchable, categorized showcase of production starter blueprints
+//! spanning all 18 embedded AI Designer curriculum categories, with 1-click loading into the
 //! Studio Workbench and multi-format download capabilities (.aid, .yaml, .aidpkg).
 
 use crate::components::palette::TEMPLATES;
@@ -32,7 +32,7 @@ pub fn render_gallery_page(
                         ui.vertical(|ui| {
                             ui.label(
                                 RichText::new(format!(
-                                    "{} AI-Examples Starter & Industry Blueprint Gallery ({} Blueprints • 18 Categories)",
+                                    "{} Starter & Industry Blueprint Gallery ({} Blueprints • 18 Categories)",
                                     bi::COLLECTION,
                                     TEMPLATES.len()
                                 ))

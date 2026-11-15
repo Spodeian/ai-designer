@@ -7,7 +7,7 @@ pub struct StarterTemplate {
 }
 
 impl StarterTemplate {
-    /// Returns the primary `AI-Examples` curriculum category ID associated with this blueprint.
+    /// Returns the primary embedded `AI Designer` curriculum category ID associated with this blueprint.
     pub fn category_id(&self) -> &'static str {
         match self.file_name {
             "01_spatiotemporal_dit_flow.yaml" => "01_paradigms_and_dichotomies",

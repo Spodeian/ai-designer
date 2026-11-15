@@ -102,6 +102,22 @@ fn generate_candle_model_rs(spec: &AiDesignSpec) -> String {
 }
 
 fn generate_candle_infer_rs(spec: &AiDesignSpec) -> String {
+    let meta_note = if matches!(
+        spec.training.optimizer_family,
+        crate::spec::training::OptimizerFamily::SelfOptimizingMeta
+    ) {
+        format!(
+            "    // Configured with Spodeian Core SelfOptimizingMeta (lr={}, hypergrad_lr={}) + {}\n",
+            spec.training.self_optimizing_meta.lr,
+            spec.training.self_optimizing_meta.hypergrad_lr,
+            spec.training.self_optimizing_meta.integrator.label(),
+        )
+    } else {
+        format!(
+            "    // Configured optimizer family: {}\n",
+            spec.training.optimizer_family.label()
+        )
+    };
     format!(
         r#"use anyhow::Result;
 use candle_core::{{Device, Tensor}};
@@ -109,7 +125,7 @@ use candle_nn::VarBuilder;
 use {}::model::{};
 
 fn main() -> Result<()> {{
-    let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
+{meta_note}    let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
     println!("Running Candle Inference on device: {{:?}}", device);
 
     // Load from memory-mapped weights if present, or construct zeroed VarBuilder
