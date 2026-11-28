@@ -20,6 +20,7 @@ tracing-subscriber = { workspace = true }
 shared = { workspace = true }
 thiserror = { workspace = true }
 ron = { workspace = true }
+spodeian-persist = { workspace = true }
 spodeian-cache = { workspace = true }
 spodeian-tokens = { workspace = true }
 spodeian-ui = { workspace = true }

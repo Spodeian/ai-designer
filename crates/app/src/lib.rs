@@ -213,11 +213,23 @@ impl AiDesignerApp {
         info!("Initializing AI Designer Studio & Training Suite...");
 
         let loaded_state = load_state_multi_tier(cc.storage).unwrap_or_default();
-        let initial_spec = if let Some(ws) = loaded_state.workspace_registry.active_workspace() {
+        // In the browser the IndexedDB copy follows a moment later (see `apply_storage_events`).
+        open_web_store(&cc.egui_ctx);
+        let studio = Self::studio_from_state(&loaded_state);
+        Self {
+            state: loaded_state,
+            studio,
+            ..Default::default()
+        }
+    }
+
+    /// Builds the studio view (active spec and panel layout) from saved state.
+    fn studio_from_state(state: &AppState) -> StudioState {
+        let initial_spec = if let Some(ws) = state.workspace_registry.active_workspace() {
             if let Some(d) = ws.active_design() {
                 d.spec.clone()
             } else {
-                loaded_state.saved_spec.clone().unwrap_or_else(|| {
+                state.saved_spec.clone().unwrap_or_else(|| {
                     let starter_yaml = shared::templates::TEMPLATES[0].yaml_content;
                     shared::format::aid_yaml::from_yaml_str(starter_yaml).unwrap_or_else(|_| {
                         shared::AiDesignSpec::new(
@@ -228,7 +240,7 @@ impl AiDesignerApp {
                 })
             }
         } else {
-            loaded_state.saved_spec.clone().unwrap_or_else(|| {
+            state.saved_spec.clone().unwrap_or_else(|| {
                 let starter_yaml = shared::templates::TEMPLATES[0].yaml_content;
                 shared::format::aid_yaml::from_yaml_str(starter_yaml).unwrap_or_else(|_| {
                     shared::AiDesignSpec::new("spatiotemporal_dit_flow", "Spatiotemporal DiT Flow")
@@ -237,17 +249,39 @@ impl AiDesignerApp {
         };
 
         let mut studio = StudioState::new_with_starter(initial_spec);
-        studio.canvas_mode = loaded_state.canvas_mode;
-        studio.bottom_dock_tab = loaded_state.bottom_dock_tab;
-        studio.focus_mode = loaded_state.focus_mode;
-        studio.left_panel_visible = loaded_state.left_panel_visible;
-        studio.right_panel_visible = loaded_state.right_panel_visible;
-        studio.bottom_dock_visible = loaded_state.bottom_dock_visible;
+        studio.canvas_mode = state.canvas_mode;
+        studio.bottom_dock_tab = state.bottom_dock_tab;
+        studio.focus_mode = state.focus_mode;
+        studio.left_panel_visible = state.left_panel_visible;
+        studio.right_panel_visible = state.right_panel_visible;
+        studio.bottom_dock_visible = state.bottom_dock_visible;
 
-        Self {
-            state: loaded_state,
-            studio,
-            ..Default::default()
+        studio
+    }
+
+    /// Applies results from the browser store: the state loaded at startup, and the
+    /// outcome of each finished save. Does nothing on native.
+    fn apply_storage_events(&mut self) {
+        match take_loaded_web_state() {
+            Some(Some(loaded)) => {
+                self.studio = Self::studio_from_state(&loaded);
+                self.state = loaded;
+                self.storage_diag.backend = StorageBackend::IndexedDb;
+            }
+            // Nothing in IndexedDB yet: move whatever loaded at startup into it.
+            Some(None) => self.persist_state(),
+            None => {}
+        }
+        match take_web_save_outcome() {
+            Some(Ok(())) => {
+                self.storage_diag.backend = StorageBackend::IndexedDb;
+                self.storage_diag.quota_exceeded = false;
+            }
+            Some(Err(message)) => {
+                error!("{message}");
+                self.storage_diag.quota_exceeded = message.contains("QuotaExceeded");
+            }
+            None => {}
         }
     }
 
@@ -269,6 +303,10 @@ impl AiDesignerApp {
         if let Ok(json_str) = serde_json::to_string(&self.state) {
             let size = json_str.len();
             self.storage_diag.usage_bytes = size as u64;
+            // Browser: queued for IndexedDB; the result arrives in `apply_storage_events`.
+            if queue_web_save(&json_str) {
+                return;
+            }
             match save_state_multi_tier(DEDICATED_STORAGE_KEY, &json_str) {
                 Ok(backend) => {
                     self.storage_diag.backend = backend;
@@ -848,14 +886,18 @@ impl eframe::App for AiDesignerApp {
         self.state.right_panel_visible = self.studio.right_panel_visible;
         self.state.bottom_dock_visible = self.studio.bottom_dock_visible;
 
-        // 2. Write standard RON state to eframe::APP_KEY
-        eframe::set_value(storage, eframe::APP_KEY, &self.state);
-
-        // 3. Write JSON to dedicated key in storage
-        if let Ok(json_str) = serde_json::to_string(&self.state) {
-            storage.set_string(DEDICATED_STORAGE_KEY, json_str);
+        // 2. Native: write the state into eframe's storage file. The browser keeps it in
+        //    IndexedDB instead, so a local storage copy would only duplicate it.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            eframe::set_value(storage, eframe::APP_KEY, &self.state);
+            if let Ok(json_str) = serde_json::to_string(&self.state) {
+                storage.set_string(DEDICATED_STORAGE_KEY, json_str);
+            }
+            storage.flush();
         }
-        storage.flush();
+        #[cfg(target_arch = "wasm32")]
+        let _ = storage;
 
         // 4. Persist to multi-tier engine
         self.persist_state();
@@ -870,6 +912,7 @@ impl eframe::App for AiDesignerApp {
             ui.spacing_mut().interact_size.y = ui.spacing_mut().interact_size.y.max(32.0);
             ui.spacing_mut().button_padding = egui::vec2(12.0, 8.0);
         }
+        self.apply_storage_events();
         self.handle_keyboard_shortcuts(ui.ctx());
 
         // Periodic diagnostics poll (every 2 seconds)
